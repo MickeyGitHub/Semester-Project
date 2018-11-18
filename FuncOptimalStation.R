@@ -9,7 +9,7 @@
 #a stamenmaps plot of the local area illustrating all nearby weather stations,
 #their relative distance from the user location, and the amount of missing data for each.
 
-OptimalStation <- function(lat, long)
+OptimalStation <- function(lat, long, start_date){
   lat_lon_df <- data.frame(id = "Station", latitude = lat, longitude = long)
   #Load in all station metadata from previously saved file
   options(noaakey = "YzLzNDLCXIzUwfAsWljYgxvxmZPMHtIj")
@@ -32,7 +32,7 @@ OptimalStation <- function(lat, long)
   for (i in 1:nrow(closest_stations)){
     df <- climate_data[climate_data$id == closest_stations[i,1],]
     id <- df$id[1]
-    avail_prcp <- sum(df$prcp, na.rm = TRUE)
+    avail_prcp <- nrow(df)
     if (avail_prcp == 0){
       avail_prcp <- NA
       id <- closest_stations[i,1]
@@ -75,6 +75,7 @@ OptimalStation <- function(lat, long)
                                                       size = 3,
                                                       data = station_metadata)
   mapPoints
-return(climate_data, station_metadata, localMap)
-
-
+  localMap <- mapPoints
+  output_data <- list(optimal_data, station_metadata, localMap)
+  return(output_data)
+}
