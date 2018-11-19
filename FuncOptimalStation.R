@@ -2,14 +2,14 @@
 #finding the closest weather stations within a 5 km radius of the user input location.
 #This is done by using the package 'rnoaa' anda pre downloaded file containing all NOAA 
 #station data. The stations are ranked based on distance from the user location and amount
-#of missing data. The data of interest is precipitation, min and max temeprature.
+#of missing data. The data of interest is precipitation in tenths of a milimeter.
 #An optimal station is determiend based on the sum of the two individual ranks.
 #The function returns three seperate things: a dataframe consisting of the climate data from
 #the optimal weather station, a dataframe consisting of the optimal station's metadata, and
 #a stamenmaps plot of the local area illustrating all nearby weather stations,
 #their relative distance from the user location, and the amount of missing data for each.
 
-OptimalStation <- function(lat, long, start_date){
+OptimalStation <- function(lat, long, start_date, end_date){
   lat_lon_df <- data.frame(id = "Station", latitude = lat, longitude = long)
   #Load in all station metadata from previously saved file
   options(noaakey = "YzLzNDLCXIzUwfAsWljYgxvxmZPMHtIj")
@@ -22,11 +22,12 @@ OptimalStation <- function(lat, long, start_date){
   closest_stations <- as.data.frame(closest_stations)
   lat <- as.vector(closest_stations$Station.latitude)
   long <- as.vector(closest_stations$Station.longitude)
-  #Retrieve data from closest weather stations (prcp in tenths of mm, temp in tenths of decC)
+  #Retrieve data from closest weather stations
   monitorIDs <- as.vector(closest_stations[[1]])
   climate_data <- meteo_pull_monitors(monitorIDs,
                                       var = c('PRCP'),
-                                      date_min = start_date)
+                                      date_min = start_date,
+                                      date_max = end_date)
   #Determine which stations have the most and least amount of available data
   station_data <- vector(mode = "list", length = nrow(closest_stations))
   for (i in 1:nrow(closest_stations)){
