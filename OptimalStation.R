@@ -4,24 +4,21 @@
 #Data type IDs found using the following URL:
 #ftp://ftp.ncdc.noaa.gov/pub/data/ghcn/daily/readme.txt 
 
-#User input for lat and long position where they plan to garden
-
-SLC <- OptimalStation(40.763885, -111.860427, '2018-01-01')
-
+#User input examples for lat and long position where they plan to garden
 BoiseID <- c(43.601309, -116.239245)
 SaltLakeUT <- c(40.763885, -111.860427)
 SeattleWA <- c(47.629107, -122.034294)
-
 AustinTX <- c(30.312490, -97.699601)
+#Start
 lat <- AustinTX[1]
 long <- AustinTX[2]
-start_date <- '2018-01-01'
-
+start_date <- '2015-01-01'
+end_date <- '2018-01-01'
 lat_lon_df <- data.frame(id = "Station", latitude = lat, longitude = long)
 #Load in all station metadata from previously saved file
 options(noaakey = "YzLzNDLCXIzUwfAsWljYgxvxmZPMHtIj")
 library(rnoaa)
-load("/Users/Zach/Documents/Hydroinformatics 7460/AguaLibre/station_data.Rdata") 
+load("/Users/Zach/Documents/Hydroinformatics 7460/AguaLibre/s1tation_data.Rdata") 
 #Retrieve the 10 closest weather station's metadata (distance in km)
 closest_stations <- meteo_nearby_stations(lat_lon_df = lat_lon_df,
                                           station_data = station_data,
@@ -33,7 +30,8 @@ long <- as.vector(closest_stations$Station.longitude)
 monitorIDs <- as.vector(closest_stations[[1]])
 climate_data <- meteo_pull_monitors(monitorIDs,
                                     var = c('PRCP'),
-                                    date_min = start_date)
+                                    date_min = start_date,
+                                    date_max = end_date)
 #Determine which stations have the most and least amount of available data
 station_data <- vector(mode = "list", length = nrow(closest_stations))
 for (i in 1:nrow(closest_stations)){
@@ -82,4 +80,4 @@ mapPoints <- ggmap(map) + ggtitle('Nearby Weather Stations: 10 km Radius, Optima
                                                     size = 3,
                                                     data = station_metadata)
 mapPoints
-
+#End
