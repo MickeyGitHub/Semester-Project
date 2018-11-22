@@ -15,8 +15,6 @@
 ######GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####
 ######GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####
 ######GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####
-######GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####
-
 
 library(shiny)
 library(leaflet)
@@ -30,7 +28,10 @@ library(RCurl)
 
 crops <- read.csv('data/crops.csv',header=TRUE)
 
-OptimalStation <- function(lat, long, start_date, end_date){
+OptimalStation <- function(lat, long){
+  start_date <- '2017-01-01'
+  end_date <- '2018-01-01'
+  # Start of 1st function
   lat_lon_df <- data.frame(id = "Station", latitude = lat, longitude = long)
   #Load in all station metadata from previously saved file
   options(noaakey = "YzLzNDLCXIzUwfAsWljYgxvxmZPMHtIj")
@@ -43,7 +44,7 @@ OptimalStation <- function(lat, long, start_date, end_date){
   closest_stations <- as.data.frame(closest_stations)
   lat <- as.vector(closest_stations$Station.latitude)
   long <- as.vector(closest_stations$Station.longitude)
-  #Retrieve data from closest weather stations
+  #Retrieve data from closest weather stations (prcp in tenths of mm, temp in tenths of decC)
   monitorIDs <- as.vector(closest_stations[[1]])
   climate_data <- meteo_pull_monitors(monitorIDs,
                                       var = c('PRCP'),
@@ -82,10 +83,10 @@ OptimalStation <- function(lat, long, start_date, end_date){
   optimal_data <- climate_data[climate_data$id == optimal_station,]
   optimal_data$SiteName <- id
   station_metadata <- closest_stations[which(closest_stations$Station.id == optimal_station),]
-  rm(i,j,id,newcols,avail_prcp,dat,dist,tot,v,row_pos,station_data,df)
+  prcp_data <- optimal_data
   #Create map showing user location relative to nearby weather stations
   library(ggmap)
-  bbox <- make_bbox(long,lat,f=0.05)
+  bbox <- make_bbox(long, lat, f=0.05)
   map <- get_map(bbox,maptype="toner-lite",source="stamen")
   mapPoints <- ggmap(map) + ggtitle('Nearby Weather Stations: 10 km Radius, Optimal Weather Station:', station_metadata$Station.name) + 
     geom_point(aes(x = Station.longitude, y = Station.latitude, color = AvailableData, size = Station.distance),
@@ -98,73 +99,88 @@ OptimalStation <- function(lat, long, start_date, end_date){
                                                       data = station_metadata)
   mapPoints
   localMap <- mapPoints
-  output_data <- list(optimal_data, station_metadata, localMap)
+  ggsave("NearbyWeatherStations.png", width = 7, height = 5)
+  pathname <- '/Users/Zach/Documents/Hydroinformatics 7460/AguaLibre'
+  localMap <- paste0(pathname,'/NearbyWeatherStations.png')
+  # End of 1st function
+  # Start of 2nd function
+  # Load new packages 
+  library(rjson)
+  library(jsonlite)
+  library(RCurl)
+  # Input
+  lat <- station_metadata[3]
+  long <- station_metadata[4]
+  start_date <- '2000-01-01'
+  # Save base and full url as variables
+  url_usu = "https://climate.usu.edu/API/api.php/v2/key=62PyzUjrCDYh0JB95faxrDcGB9tTss/evapotranspiration/average_monthly_sum"
+  full_url = paste0(url_usu,'/state=UT/network=ghcn','/lat=',lat,'/long=',long,'/start_date=',start_date,'/end_date=',end_date,'/units=m/month=(1,2,3,4,5,6,7,8,9,10,11,12)/buffer=10')
+  # Convert JSON to data frame
+  evap_data <- fromJSON(getURL(full_url))
+  # Break down list structure into numeric dataframe
+  evap_data <- do.call(rbind, evap_data[[2]])
+  evap_data <- evap_data[c(2:13),]
+  evap <- as.numeric(evap_data[,1])
+  mon <- as.numeric(evap_data[,2])
+  std <- as.numeric(evap_data[,3])
+  evap_data <- data.frame('month' = mon, 'evap_sum' = evap, 'std_dev' = std)
+  # End of 2nd function
+  output_data <- list(prcp_data, evap_data, localMap)
+  #End
   return(output_data)
 }
-
 ##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal
 
 ######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui
 ######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui
 ######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui
-######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui
-######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui
-######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui
-######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui
-######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui
-######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui
-######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui
-######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui
-######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui
 
-# Define UI for application that draws a histogram
 ui <- fluidPage(
   
   # Application title
   titlePanel("AQUA LIBRE:
              Rainwater Collection and Garden Irrigation Demand"),
   sidebarLayout(
-  sidebarPanel(
-  numericInput("Lat","Enter Latitude of Site",
-               value = 40.767011, min = NA, max = NA, step = 0.000001, width = NULL)
-  ),
-  sidebarPanel(
-  numericInput("Long","Enter Longitude of Site",
-               value = , -111.846033, min = NA, max = NA, step = 0.000001, width = NULL)
-  )
-  
+    sidebarPanel(
+      numericInput("Lat","Enter Latitude of Site",
+                   value = 40.767011, min = NA, max = NA, step = 0.000001, width = NULL)
+    ),
+    sidebarPanel(
+      numericInput("Long","Enter Longitude of Site",
+                   value = , -111.846033, min = NA, max = NA, step = 0.000001, width = NULL)
+    )
+    
   ),
   # Sidebar with a slider input for number of bins 
-
-    sidebarPanel(
-      numericInput("Garden_Area",
-                   "Input Garden Area in Acres:",
-                   value = 0.5, min = NA, max = NA, step = 0.001, width = NULL
-      )
+  sidebarPanel(
+    numericInput("Garden_Area",
+                 "Input Garden Area in Acres:",
+                 value = 0.5, min = NA, max = NA, step = 0.001, width = NULL
+    )
+  ),
+  
+  sidebarPanel(
+    numericInput ("Roof_Area",
+                  "Input Roof Area in Acres:",
+                  value = 0.8, min = NA, max = NA, step = 0.001, width = NULL
+    )
+  ),
+  
+  mainPanel( 
+    
+    
+    #Text explaining how to find areas using the map
+    h6("Use the 'Create 
+       New Measurement' tool in the upper right side of the map to trace
+       the outside of your garden. Input the area value into the 'Garden Area' box.
+       Repeat the process for measuring the roof area used for rainwater collection.
+       Input into 'Roof Area' box."),
+    
+    leafletOutput("map1"),
+    imageOutput("map2"),
+    tableOutput("table1")
+    
     ),
-
-      sidebarPanel(
-        numericInput ("Roof_Area",
-                      "Input Roof Area in Acres:",
-                      value = 0.8, min = NA, max = NA, step = 0.001, width = NULL
-        )
-      ),
-
-      # Show a plot of the generated distribution
-      mainPanel( 
-        
-      
-        #Text explaining how to find areas using the map
-        h6("Use the 'Create 
-           New Measurement' tool in the upper right side of the map to trace
-           the outside of your garden. Input the area value into the 'Garden Area' box.
-           Repeat the process for measuring the roof area used for rainwater collection.
-           Input into 'Roof Area' box."),
-        
-        leafletOutput("map1"),
-                 plotOutput("distPlot")
-        
-      ),
   sidebarLayout(
     sidebarPanel(
       
@@ -182,44 +198,28 @@ ui <- fluidPage(
                   max = 100, value = 75),
       
       h6("Common Efficiencies: Drip Irrigation 90%. Sprinklers 75%"),
-
+      
       # Making a Rooftop Efficiency Widget 
       sliderInput("Roof_Eff", label = h4("Choose Your Rainwater Collection Efficiency"), min = 0, 
                   max = 100, value = 75),
       
       h6("Common Efficiencies: 90% for most roofs. New metal roofs up to 95%.")
-    
-      ),
+      
+    ),
     mainPanel(
-      
-      plotOutput("IrrigationPlot"),
-      
-      h4("These are the words. The words I wish were not so far down here.")
     )
-    
+  )
 )
-)
-###ENDui###ENDui###ENDui###ENDui###ENDui###ENDui###ENDui###ENDui###ENDui###ENDui###ENDui###ENDui###ENDui###ENDui###ENDui
 
-#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server
-#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server
-#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server
-#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server
-#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server
-#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server
-#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server
-#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server
-#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server
-#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server
-#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server
-#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server
-#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server
-#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server
-#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server#####server
+######ENDui######ENDui######ENDui######ENDui######ENDui######ENDui######ENDui######ENDui######ENDui######
 
-# Define server logic required to draw a histogram
+######server######server######server######server######server######server######server######server######
+######server######server######server######server######server######server######server######server######
+######server######server######server######server######server######server######server######server######
+
 server <- function(input, output, session) {
-
+  
+  # Render interactive map for user to draw garden and roof areas
   output$map1 <-renderLeaflet({
     m<-leaflet() %>%
       addTiles() %>%
@@ -228,20 +228,14 @@ server <- function(input, output, session) {
       addMeasure()
   })
 
+  # Render map image showing user location relative to nearby weather stations
+  output$map2 <- renderImage({
+    data1 <- OptimalStation(lat = input$Lat, long = input$Long)
+    source <- data1[[3]]
+    list(src = source, contentType = 'image/png', width = 700, height = 600)
+  })
+  
 }
-
-##ENDserver##ENDserver##ENDserver##ENDserver##ENDserver##ENDserver##ENDserver##ENDserver##ENDserver##ENDserver##ENDserver
-
-
-# Run the application # Run the application # Run the application # Run the application # Run the application 
-# Run the application # Run the application # Run the application # Run the application # Run the application 
-# Run the application # Run the application # Run the application # Run the application # Run the application 
-# Run the application # Run the application # Run the application # Run the application # Run the application 
-# Run the application # Run the application # Run the application # Run the application # Run the application 
-# Run the application # Run the application # Run the application # Run the application # Run the application 
-# Run the application # Run the application # Run the application # Run the application # Run the application 
-# Run the application # Run the application # Run the application # Run the application # Run the application 
-# Run the application # Run the application # Run the application # Run the application # Run the application 
 
 shinyApp(ui = ui, server = server)
 
