@@ -222,7 +222,7 @@ ui <- fluidPage(
   # Application title
   titlePanel("AQUA LIBRE:
              Rainwater Collection and Garden Irrigation Demand"),
-  actionButton("execute", "Get Your Data"),
+  actionButton("execute", "Get Your Data: run time is about 1 minute"),
   sidebarLayout(
     sidebarPanel(
       numericInput("Lat","Enter Latitude of Site",
@@ -308,7 +308,8 @@ server <- function(input, output, session) {
       addMeasure()
   })
   
-  # Action button linked to latitude and longitude user inputs linked to data retrieval functions
+  # Action button linked to latitude and longitude user inputs that are linked to data
+  # retrieval functions
   coords <- reactiveValues(data = NULL)
   
   observeEvent(input$execute, {
