@@ -239,7 +239,7 @@ ui <- fluidPage(
   # Application title
   titlePanel("AQUA LIBRE:
              Rainwater Collection and Garden Irrigation Demand"),
-  actionButton("execute", "Execute Latitude and Longitude"),
+  actionButton("execute", "Get Your Data"),
   sidebarLayout(
     sidebarPanel(
       numericInput("Lat","Enter Latitude of Site",
@@ -318,12 +318,13 @@ server <- function(input, output, session) {
   # Render interactive map for user to draw garden and roof areas
   output$map1 <-renderLeaflet({
     m<-leaflet() %>%
-      addTiles() %>%
+      addProviderTiles('Esri.WorldImagery') %>%
       addMarkers(lng = input$Long, lat = input$Lat, popup="Your Site") %>%
       setView(lng = input$Long, lat = input$Lat, zoom = 16 )  %>%
       addMeasure()
   })
   
+  # Action button linked to latitude and longitude user inputs linked to data retrieval functions
   coords <- reactiveValues(data = NULL)
   
   observeEvent(input$execute, {
@@ -338,7 +339,7 @@ server <- function(input, output, session) {
   output$map2 <- renderImage({
     data1 <- OptimalStation(lat = coords$lat, long = coords$long)
     source <- data1
-    list(src = source, contentType = 'image/png', width = 800, height = 700)
+    list(src = source, contentType = 'image/png', width = 700, height = 700)
   })
   
 }
