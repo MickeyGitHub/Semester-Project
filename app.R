@@ -108,13 +108,12 @@ OptimalStation <- function(lat, long){
   library(ggmap)
   bbox <- make_bbox(long,lat,f=0.05)
   map <- get_map(bbox,maptype="toner-lite",source="stamen")
-  mapPoints <- ggmap(map) + ggtitle('Nearby Weather Stations: 10 km Radius, Optimal Weather Station:', station_metadata$Station.name) + 
+  mapPoints <- ggmap(map) + ggtitle('Nearby Weather Stations within 10 km Radius. Optimal Weather Station:', station_metadata$Station.name) + 
     geom_point(aes(x = Station.longitude, y = Station.latitude, color = AvailableData, size = Station.distance),
                data = closest_stations) + 
     scale_colour_gradient(low = "purple", high = "cyan", na.value = 'purple') +
-    xlab("Longitude") + ylab("Latitude") + geom_point(aes(x = Station.longitude, y = Station.latitude),
+    xlab("Longitude") + ylab("Latitude") + geom_point(aes(x = Station.longitude, y = Station.latitude, shape = Station.id),
                                                       color = 'red',
-                                                      shape = 18,
                                                       size = 3,
                                                       data = station_metadata)
   mapPoints
@@ -256,10 +255,10 @@ OptimalData <- function(lat, long){
 ######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui
 
 ui <- fluidPage(
-  
   # Application title
   titlePanel("AQUA LIBRE:
              Rainwater Collection and Garden Irrigation Demand"),
+  actionButton("execute", "Execute"),
   sidebarLayout(
     sidebarPanel(
       numericInput("Lat","Enter Latitude of Site",
@@ -269,7 +268,6 @@ ui <- fluidPage(
       numericInput("Long","Enter Longitude of Site",
                    value = , -111.846033, min = NA, max = NA, step = 0.000001, width = NULL)
     )
-    
   ),
   # Sidebar with a slider input for number of bins 
   sidebarPanel(
@@ -278,7 +276,6 @@ ui <- fluidPage(
                  value = 0.5, min = NA, max = NA, step = 0.001, width = NULL
     )
   ),
-  
   sidebarPanel(
     numericInput ("Roof_Area",
                   "Input Roof Area in Acres:",
@@ -297,8 +294,8 @@ ui <- fluidPage(
        Input into 'Roof Area' box."),
     
     leafletOutput("map1"),
-    imageOutput("map2"),
-    tableOutput("table1")
+    tableOutput("table1"),
+    imageOutput("map2")
     
     ),
   sidebarLayout(
@@ -326,8 +323,7 @@ ui <- fluidPage(
       h6("Common Efficiencies: 90% for most roofs. New metal roofs up to 95%.")
       
     ),
-    mainPanel(
-    )
+    mainPanel()
   )
   )
 
@@ -348,15 +344,21 @@ server <- function(input, output, session) {
       addMeasure()
   })
   
-  # Render map image showing user location relative to nearby weather stations
-  output$map2 <- renderImage({
-    data1 <- OptimalStation(lat = input$Lat, long = input$Long)
-    source <- data1
-    list(src = source, contentType = 'image/png', width = 500, height = 400)
+  coords <- reactiveValues(data = NULL)
+  
+  observeEvent(input$execute, {
+    coords$lat <- input$Lat
   })
   
-  output$table1 <- renderTable({
-    data2 <- OptimalData(lat = input$Lat, long = input$Long)
+  observeEvent(input$execute, {
+    coords$long <- input$Long
+  }) 
+  
+  # Render map image showing user location relative to nearby weather stations
+  output$map2 <- renderImage({
+    data1 <- OptimalStation(lat = coords$lat, long = coords$long)
+    source <- data1
+    list(src = source, contentType = 'image/png', width = 800, height = 700)
   })
   
 }
