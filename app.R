@@ -27,7 +27,7 @@ library(jsonlite)
 library(RCurl)
 
 crops <- read.csv('data/crops.csv',header=TRUE)
-
+# Function returns map image of nearyby weather stations with available data
 OptimalStation <- function(lat, long){
   start_date <- '2017-01-01'
   end_date <- '2018-01-01'
@@ -84,26 +84,6 @@ OptimalStation <- function(lat, long){
   optimal_data$SiteName <- id
   station_metadata <- closest_stations[which(closest_stations$Station.id == optimal_station),]
   rm(i,j,id,newcols,avail_prcp,dat,dist,tot,v,row_pos,station_data,df)
-  # Determine monthly precp 
-  values <- prcp_data$prcp
-  dates <- prcp_data$date
-  dates <- as.Date.factor(dates)
-  dates <- format.Date(dates, "%m")
-  dates <- as.numeric(dates)
-  months <- vector(mode = "list", length = 12)
-  for (i in 1:12){
-    a <- months[[i]]
-    for (k in 1:length(values)){
-      if (dates[k] == i){
-        a[k] <- values[k]
-      }
-    }
-    months[[i]] <- a
-    months[[i]] <- sum(months[[i]], na.rm = TRUE)
-  }
-  monthly_prcp <-  do.call(rbind, months)
-  #Convert from tenths of mm to inches
-  monthly_prcp <- ((monthly_prcp/10)/1000)*39.3701
   # Create map showing user location relative to nearby weather stations
   library(ggmap)
   bbox <- make_bbox(long,lat,f=0.05)
@@ -125,9 +105,12 @@ OptimalStation <- function(lat, long){
   #End
   return(output_data)
 }
-
+# Function returns climate dataframe consistng of precipitation (prcp) and evapotranspiration
+# (evap) at the determined optimal weather station. First part of function retreives prcp data
+# using package 'rnoaa'. Second part of function retrieves evap data using the Utah State 
+# Climate Center's API online system.
 OptimalData <- function(lat, long){
-  # Start of 1st function
+  # Start of 1st part
   start_date <- '2017-01-01'
   end_date <- '2018-01-01'
   lat_lon_df <- data.frame(id = "Station", latitude = lat, longitude = long)
@@ -203,8 +186,8 @@ OptimalData <- function(lat, long){
   monthly_prcp <-  do.call(rbind, months)
   #Convert from tenths of mm to inches
   monthly_prcp <- ((monthly_prcp/10)/1000)*39.3701
-  # End of 1st function
-  # Start of 2nd function
+  # End of 1st part
+  # Start of 2nd part
   # Load new packages 
   library(rjson)
   library(jsonlite)
@@ -275,6 +258,7 @@ ui <- fluidPage(
        Input into 'Roof Area' box."),
     
     leafletOutput("map1"),
+    tableOutput("table1"),
     imageOutput("map2")
     
     ),
@@ -334,6 +318,11 @@ server <- function(input, output, session) {
   observeEvent(input$execute, {
     coords$long <- input$Long
   }) 
+  
+  # Render table of monthly precip and evapotranspiration data from optimal station
+  output$table1 <- renderTable({
+    data2 <- OptimalData(lat = coords$lat, long = coords$long)
+  })
   
   # Render map image showing user location relative to nearby weather stations
   output$map2 <- renderImage({
