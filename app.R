@@ -36,14 +36,14 @@ OptimalStation <- function(lat, long){
   options(noaakey = "YzLzNDLCXIzUwfAsWljYgxvxmZPMHtIj")
   library(rnoaa)
   load("/Users/Zach/Documents/Hydroinformatics 7460/AguaLibre/utah_stations.Rdata") 
-  # Retrieve the 10 closest weather station's metadata (distance in km)
+  # Retrieve the closest weather station's metadata within a 10 km radius
   closest_stations <- meteo_nearby_stations(lat_lon_df = lat_lon_df,
                                             station_data = utah_stations,
                                             radius = 10)
   closest_stations <- as.data.frame(closest_stations)
   lat <- as.vector(closest_stations$Station.latitude)
   long <- as.vector(closest_stations$Station.longitude)
-  # Retrieve data from closest weather stations (prcp in tenths of mm, temp in tenths of decC)
+  # Retrieve data from closest weather stations (prcp in tenths of mm)
   monitorIDs <- as.vector(closest_stations[[1]])
   climate_data <- meteo_pull_monitors(monitorIDs,
                                       var = c('PRCP'),
@@ -105,7 +105,7 @@ OptimalStation <- function(lat, long){
   #End
   return(output_data)
 }
-# Function returns climate dataframe consistng of precipitation (prcp) and evapotranspiration
+# Function returns climate dataframe consistng of monthly precipitation (prcp) and evapotranspiration
 # (evap) at the determined optimal weather station. First part of function retreives prcp data
 # using package 'rnoaa'. Second part of function retrieves evap data using the Utah State 
 # Climate Center's API online system.
@@ -118,14 +118,14 @@ OptimalData <- function(lat, long){
   options(noaakey = "YzLzNDLCXIzUwfAsWljYgxvxmZPMHtIj")
   library(rnoaa)
   load("/Users/Zach/Documents/Hydroinformatics 7460/AguaLibre/utah_stations.Rdata") 
-  # Retrieve the 10 closest weather station's metadata (distance in km)
+  # Retrieve the closest weather station's metadata within a 10 km radius
   closest_stations <- meteo_nearby_stations(lat_lon_df = lat_lon_df,
                                             station_data = utah_stations,
                                             radius = 10)
   closest_stations <- as.data.frame(closest_stations)
   lat <- as.vector(closest_stations$Station.latitude)
   long <- as.vector(closest_stations$Station.longitude)
-  # Retrieve data from closest weather stations (prcp in tenths of mm, temp in tenths of decC)
+  # Retrieve data from closest weather stations (prcp in tenths of mm)
   monitorIDs <- as.vector(closest_stations[[1]])
   climate_data <- meteo_pull_monitors(monitorIDs,
                                       var = c('PRCP'),
@@ -166,7 +166,7 @@ OptimalData <- function(lat, long){
   optimal_data$SiteName <- id
   station_metadata <- closest_stations[which(closest_stations$Station.id == optimal_station),]
   rm(i,j,id,newcols,avail_prcp,dat,dist,tot,v,row_pos,station_data,df)
-  # Determine monthly precp 
+  # Determine monthly prcp 
   values <- prcp_data$prcp
   dates <- prcp_data$date
   dates <- as.Date.factor(dates)
@@ -212,6 +212,7 @@ OptimalData <- function(lat, long){
   output_data <- climate_data
   return(output_data)
 }
+
 ##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal
 
 ######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui######ui
@@ -322,14 +323,13 @@ server <- function(input, output, session) {
   
   # Render table of monthly precip and evapotranspiration data from optimal station
   output$table1 <- renderTable({
-    data2 <- OptimalData(lat = coords$lat, long = coords$long)
+    data1 <- OptimalData(lat = coords$lat, long = coords$long)
   })
   
   # Render map image showing user location relative to nearby weather stations
   output$map2 <- renderImage({
-    data1 <- OptimalStation(lat = coords$lat, long = coords$long)
-    source <- data1
-    list(src = source, contentType = 'image/png', width = 700, height = 700)
+    data2 <- OptimalStation(lat = coords$lat, long = coords$long)
+    list(src = data2, contentType = 'image/png', width = 700, height = 700)
   })
   
 }
