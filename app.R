@@ -112,7 +112,7 @@ OptimalStation <- function(lat, long){
     geom_point(aes(x = Station.longitude, y = Station.latitude, color = AvailableData, size = Station.distance),
                data = closest_stations) + 
     scale_colour_gradient(low = "purple", high = "cyan", na.value = 'purple') +
-    xlab("Longitude") + ylab("Latitude") + geom_point(aes(x = Station.longitude, y = Station.latitude, shape = Station.id),
+    xlab("Longitude") + ylab("Latitude") + geom_point(aes(x = Station.longitude, y = Station.latitude, shape = Station.name),
                                                       color = 'red',
                                                       size = 3,
                                                       data = station_metadata)
@@ -203,25 +203,6 @@ OptimalData <- function(lat, long){
   monthly_prcp <-  do.call(rbind, months)
   #Convert from tenths of mm to inches
   monthly_prcp <- ((monthly_prcp/10)/1000)*39.3701
-  # Create map showing user location relative to nearby weather stations
-  library(ggmap)
-  bbox <- make_bbox(long,lat,f=0.05)
-  map <- get_map(bbox,maptype="toner-lite",source="stamen")
-  mapPoints <- ggmap(map) + ggtitle('Nearby Weather Stations: 10 km Radius, Optimal Weather Station:', station_metadata$Station.name) + 
-    geom_point(aes(x = Station.longitude, y = Station.latitude, color = AvailableData, size = Station.distance),
-               data = closest_stations) + 
-    scale_colour_gradient(low = "purple", high = "cyan", na.value = 'purple') +
-    xlab("Longitude") + ylab("Latitude") + geom_point(aes(x = Station.longitude, y = Station.latitude),
-                                                      color = 'red',
-                                                      shape = 18,
-                                                      size = 3,
-                                                      data = station_metadata)
-  mapPoints
-  localMap <- mapPoints
-  ggsave("NearbyWeatherStations.png", width = 7, height = 5)
-  pathname <- '/Users/Zach/Documents/Hydroinformatics 7460/AguaLibre'
-  localMap <- paste0(pathname,'/NearbyWeatherStations.png')
-  output_data <- localMap
   # End of 1st function
   # Start of 2nd function
   # Load new packages 
@@ -258,7 +239,7 @@ ui <- fluidPage(
   # Application title
   titlePanel("AQUA LIBRE:
              Rainwater Collection and Garden Irrigation Demand"),
-  actionButton("execute", "Execute"),
+  actionButton("execute", "Execute Latitude and Longitude"),
   sidebarLayout(
     sidebarPanel(
       numericInput("Lat","Enter Latitude of Site",
@@ -294,7 +275,6 @@ ui <- fluidPage(
        Input into 'Roof Area' box."),
     
     leafletOutput("map1"),
-    tableOutput("table1"),
     imageOutput("map2")
     
     ),
