@@ -25,31 +25,33 @@ library(dplyr)
 library(rjson)
 library(jsonlite)
 library(RCurl)
+library(scales)
 
 crops <- read.csv('data/crops.csv',header=TRUE)
-# Function returns map image of nearyby weather stations with available data
-OptimalStation <- function(lat, long){
+
+OptimalStation <- function(lat, long, Roof, roofeff, veggies){
   start_date <- '2017-01-01'
   end_date <- '2018-01-01'
+  # Start of 1st function
   lat_lon_df <- data.frame(id = "Station", latitude = lat, longitude = long)
-  # Load in all station metadata from previously saved file
+  #Load in all station metadata from previously saved file
   options(noaakey = "YzLzNDLCXIzUwfAsWljYgxvxmZPMHtIj")
   library(rnoaa)
   load("utah_stations.Rdata") 
-  # Retrieve the closest weather station's metadata within a 10 km radius
+  #Retrieve the closest weather station's metadata within a 10 km radius
   closest_stations <- meteo_nearby_stations(lat_lon_df = lat_lon_df,
                                             station_data = utah_stations,
                                             radius = 10)
   closest_stations <- as.data.frame(closest_stations)
   lat <- as.vector(closest_stations$Station.latitude)
   long <- as.vector(closest_stations$Station.longitude)
-  # Retrieve data from closest weather stations (prcp in tenths of mm)
+  #Retrieve data from closest weather stations (prcp in tenths of mm)
   monitorIDs <- as.vector(closest_stations[[1]])
   climate_data <- meteo_pull_monitors(monitorIDs,
                                       var = c('PRCP'),
                                       date_min = start_date,
                                       date_max = end_date)
-  # Determine which stations have the most and least amount of available data
+  #Determine which stations have the most and least amount of available data
   station_data <- vector(mode = "list", length = nrow(closest_stations))
   for (i in 1:nrow(closest_stations)){
     df <- climate_data[climate_data$id == closest_stations[i,1],]
@@ -64,13 +66,13 @@ OptimalStation <- function(lat, long){
   }
   station_data <-  do.call(rbind, station_data)
   colnames(station_data) <- c('id', 'avail_prcp')
-  # Populate the closest stations data with this new information
+  #Populate the closest stations data with this new information
   newcols <- c('AvailableData')
   closest_stations[, newcols] <- NA
   for (j in 1:nrow(closest_stations)){
     closest_stations$AvailableData[j] <- as.numeric(station_data[j,2])
   }
-  # Determine optimal station based on distance from user location and available data
+  #Determine optimal station based on distance from user location and available data
   closest_stations <- closest_stations[!is.na(closest_stations$AvailableData),]
   dist <- rank(closest_stations$Station.distance)
   dat <- rank(-closest_stations$AvailableData)
@@ -80,93 +82,11 @@ OptimalStation <- function(lat, long){
   row_pos <- which.min(rankings[,5])
   optimal_station <- rankings[row_pos,1]
   optimal_data <- climate_data[climate_data$id == optimal_station,]
-  prcp_data <- optimal_data
   optimal_data$SiteName <- id
   station_metadata <- closest_stations[which(closest_stations$Station.id == optimal_station),]
-  rm(i,j,id,newcols,avail_prcp,dat,dist,tot,v,row_pos,station_data,df)
-  # Create map showing user location relative to nearby weather stations
-  library(ggmap)
-  bbox <- make_bbox(long,lat,f=0.05)
-  map <- get_map(bbox,maptype="toner-lite",source="stamen")
-  mapPoints <- ggmap(map) + ggtitle('Nearby Weather Stations within 10 km Radius. Optimal Weather Station:', station_metadata$Station.name) + 
-    geom_point(aes(x = Station.longitude, y = Station.latitude, color = AvailableData, size = Station.distance),
-               data = closest_stations) + 
-    scale_colour_gradient(low = "purple", high = "cyan", na.value = 'purple') +
-    xlab("Longitude") + ylab("Latitude") + geom_point(aes(x = Station.longitude, y = Station.latitude, shape = Station.name),
-                                                      color = 'red',
-                                                      size = 3,
-                                                      data = station_metadata)
-  mapPoints
-  localMap <- mapPoints
-  ggsave("NearbyWeatherStations.png", width = 7, height = 5)
-  pathname <- '/Users/michaelnavidomskis/Desktop/AguaLibre'
-  localMap <- paste0(pathname,'/NearbyWeatherStations.png')
-  output_data <- localMap
-  #End
-  return(output_data)
-}
-# Function returns climate dataframe consisting of monthly precipitation (prcp) and evapotranspiration
-# (evap) at the determined optimal weather station. First part of function retreives prcp data
-# using package 'rnoaa'. Second part of function retrieves evap data using the Utah State 
-# Climate Center's API online system.
-OptimalData <- function(lat, long, Roof, roofeff, vegis){
-  # Start of 1st part
-  start_date <- '2017-01-01'
-  end_date <- '2018-01-01'
-  lat_lon_df <- data.frame(id = "Station", latitude = lat, longitude = long)
-  # Load in all station metadata from previously saved file
-  options(noaakey = "YzLzNDLCXIzUwfAsWljYgxvxmZPMHtIj")
-  library(rnoaa)
-  load("utah_stations.Rdata") 
-  # Retrieve the closest weather station's metadata within a 10 km radius
-  closest_stations <- meteo_nearby_stations(lat_lon_df = lat_lon_df,
-                                            station_data = utah_stations,
-                                            radius = 10)
-  closest_stations <- as.data.frame(closest_stations)
-  lat <- as.vector(closest_stations$Station.latitude)
-  long <- as.vector(closest_stations$Station.longitude)
-  # Retrieve data from closest weather stations (prcp in tenths of mm)
-  monitorIDs <- as.vector(closest_stations[[1]])
-  climate_data <- meteo_pull_monitors(monitorIDs,
-                                      var = c('PRCP'),
-                                      date_min = start_date,
-                                      date_max = end_date)
-  # Determine which stations have the most and least amount of available data
-  station_data <- vector(mode = "list", length = nrow(closest_stations))
-  for (i in 1:nrow(closest_stations)){
-    df <- climate_data[climate_data$id == closest_stations[i,1],]
-    id <- df$id[1]
-    avail_prcp <- nrow(df)
-    if (avail_prcp == 0){
-      avail_prcp <- NA
-      id <- closest_stations[i,1]
-    }
-    v <- c(id, avail_prcp)
-    station_data[[i]] <- v
-  }
-  station_data <-  do.call(rbind, station_data)
-  colnames(station_data) <- c('id', 'avail_prcp')
-  # Populate the closest stations data with this new information
-  newcols <- c('AvailableData')
-  closest_stations[, newcols] <- NA
-  for (j in 1:nrow(closest_stations)){
-    closest_stations$AvailableData[j] <- as.numeric(station_data[j,2])
-  }
-  # Determine optimal station based on distance from user location and available data
-  closest_stations <- closest_stations[!is.na(closest_stations$AvailableData),]
-  dist <- rank(closest_stations$Station.distance)
-  dat <- rank(-closest_stations$AvailableData)
-  tot <- dist + dat
-  rankings <- cbind(closest_stations$Station.id, closest_stations$Station.name, dist, dat, tot)
-  colnames(rankings) <- c('id', 'Name', 'Distance','AvailableData', 'Total')
-  row_pos <- which.min(rankings[,5])
-  optimal_station <- rankings[row_pos,1]
-  optimal_data <- climate_data[climate_data$id == optimal_station,]
   prcp_data <- optimal_data
-  optimal_data$SiteName <- id
-  station_metadata <- closest_stations[which(closest_stations$Station.id == optimal_station),]
   rm(i,j,id,newcols,avail_prcp,dat,dist,tot,v,row_pos,station_data,df)
-  # Determine monthly prcp 
+  # Determine monthly precp 
   values <- prcp_data$prcp
   dates <- prcp_data$date
   dates <- as.Date.factor(dates)
@@ -186,8 +106,24 @@ OptimalData <- function(lat, long, Roof, roofeff, vegis){
   monthly_prcp <-  do.call(rbind, months)
   #Convert from tenths of mm to inches
   monthly_prcp <- ((monthly_prcp/10)/1000)*39.3701
-  # End of 1st part
-  # Start of 2nd part
+  # Create map showing user location relative to nearby weather stations
+  library(ggmap)
+  bbox <- make_bbox(long,lat,f=0.05)
+  map <- get_map(bbox,maptype="toner-lite",source="stamen")
+  mapPoints <- ggmap(map) + ggtitle('Nearby Weather Stations within 10 km Radius. Optimal Weather Station:', station_metadata$Station.name) + 
+    geom_point(aes(x = Station.longitude, y = Station.latitude, color = AvailableData, size = Station.distance),
+               data = closest_stations) + 
+    scale_colour_gradient(low = "purple", high = "cyan", na.value = 'purple') +
+    xlab("Longitude") + ylab("Latitude") + geom_point(aes(x = Station.longitude, y = Station.latitude, shape = Station.name),
+                                                      color = 'red',
+                                                      size = 3,
+                                                      data = station_metadata)
+  mapPoints
+  ggsave("NearbyWeatherStations.jpg", width = 7, height = 5)
+  pathname <- '/Users/Zach/Documents/Hydroinformatics 7460/AguaLibre'
+  localMap <- paste0(pathname,'/NearbyWeatherStations.jpg')
+  # End of 1st function
+  # Start of 2nd function
   # Load new packages 
   library(rjson)
   library(jsonlite)
@@ -205,8 +141,13 @@ OptimalData <- function(lat, long, Roof, roofeff, vegis){
   evap_data <- do.call(rbind, evap_data[[2]])
   evap_data <- evap_data[c(2:13),]
   evap <- as.numeric(evap_data[,1])
-  mon <- as.numeric(evap_data[,2])
+  mon <- c(1:12)
+  mon_char <- c("Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec")
   std <- as.numeric(evap_data[,3])
+  
+  ######Addition######Addition######Addition######Addition######Addition######Addition######
+  ######Addition######Addition######Addition######Addition######Addition######Addition######
+  ######Addition######Addition######Addition######Addition######Addition######Addition######
   
   #dimension effective precipitation dataframe
   precip_effective <- rep(NA,12)
@@ -220,7 +161,7 @@ OptimalData <- function(lat, long, Roof, roofeff, vegis){
     
   }
   precip_effective[precip_effective<0] <- 0
-    
+  
   #Calculating the monthly collected rainfall in cubic meters
   
   #dimension effective precipitation dataframe
@@ -234,54 +175,42 @@ OptimalData <- function(lat, long, Roof, roofeff, vegis){
     Collected_Precip[i] <- ((monthly_prcp[i]/12)*conversion*Roof*(roofeff/100))
   }
   
-
-  for (i in 1:12) {
-  Stored_Water[i] <- (Collected_Precip[i] + Stored_Water[i-1])
+  Stored_Water[1] <- Collected_Precip[1]
+  for (i in 2:12) {
+    Stored_Water[i] <- (Collected_Precip[i] + Stored_Water[i-1])
   }
   
   #dimensioning variables to match length of variable 'crops'
-  Chosen_Crop_K <- rep(NA,length(crops))
-  Portion_Of_Crop <- rep(NA,length(crops))
-  Coeff_Factor <- rep(NA,length(crops))
+  crop <- as.character(crops$crop)
+  coeff <- crops$coefficient
+  crop_coeff <- rep(NA,length(veggies))
+  # select crop coefficients based on user input 'veggies'
+  for (i in veggies){
+    row_pos <- which(crop == i)
+    crop_coeff[i] <- coeff[row_pos]
+  }
+  crop_coeff <- na.omit(crop_coeff)
+  crop_coeff <- as.numeric(crop_coeff)
   
-
-
-  
-  newEvap <- rep(NA,length(evap))
-  newEvap[i] <- (evap[i]*2)
-  
+  #Chosen_Crop_K <- rep(NA,length(crops))
+  #Portion_Of_Crop <- rep(NA,length(crops))
+  #Coeff_Factor <- rep(NA,length(crops))
   
   # Combine monthly prcp and evap data together in dataframe
-  climate_data <- data.frame('month' = mon,'Precipitation' = monthly_prcp,
+  climate_data <- data.frame('index' = mon, 'Month' = mon_char, 'Precipitation_in' = monthly_prcp,
                              'Effective_Precip' = precip_effective,
-                             'Collected_Rain_Vol(m3)' = Collected_Precip, 
-                             'Cumulative_Rain_Vol(m3)' = Stored_Water, 
+                             'Collected_Rain_m3' = Collected_Precip, 
+                             'Cumulative_Rain_m3' = Stored_Water, 
                              'evap_sum_in' = evap, 
-                             'Adjusted_Evap' = newEvap, 
                              'evap_std' = std)
-  output_data <- climate_data
+  
+  ######Addition######Addition######Addition######Addition######Addition######Addition######
+  ######Addition######Addition######Addition######Addition######Addition######Addition######
+  ######Addition######Addition######Addition######Addition######Addition######Addition######
+  
+  output_data <- list(climate_data, localMap)
   return(output_data)
 }
-
-######################################################################################
-######################################################################################
-#       Don't mess up Zach's hard work       Don't mess up Zach's hard work
-######################################################################################
-######################################################################################
-#       Don't mess up Zach's hard work       Don't mess up Zach's hard work
-######################################################################################
-######################################################################################
-#       Don't mess up Zach's hard work       Don't mess up Zach's hard work
-######################################################################################
-######################################################################################
-#       Don't mess up Zach's hard work       Don't mess up Zach's hard work
-######################################################################################
-######################################################################################
-
-
-######################################################################################
-######################################################################################
-
 
 ##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal
 
@@ -293,7 +222,7 @@ ui <- fluidPage(
   # Application title
   titlePanel("AQUA LIBRE:
              Rainwater Collection and Garden Irrigation Demand"),
-  actionButton("execute", "Get Your Data: run time is about 1 minute"),
+  actionButton("execute", "Get Your Data: run time is less than 1 minute"),
   sidebarLayout(
     sidebarPanel(
       numericInput("Lat","Enter Latitude of Site",
@@ -330,15 +259,14 @@ ui <- fluidPage(
     
     leafletOutput("map1"),
     tableOutput("table1"),
-    imageOutput("map2"),
-    plotOutput("Plot1")
-
+    plotOutput("plot1"),
+    imageOutput("map2")
     
     ),
   sidebarLayout(
     sidebarPanel(
       
-      #making a selection box widget
+      #making a selection box widget for cops
       selectInput("Chosen_Crops", label = h4("Choose Your Crops"), 
                   choices = unique(crops$crop), 
                   selected = "Carrots",
@@ -393,6 +321,10 @@ server <- function(input, output, session) {
     coords$long <- input$Long
   }) 
   
+  ######Addition######Addition######Addition######Addition######Addition######Addition######
+  ######Addition######Addition######Addition######Addition######Addition######Addition######
+  ######Addition######Addition######Addition######Addition######Addition######Addition######
+  
   observeEvent(input$execute, {
     coords$Roof <- input$Roof_Area
   }) 
@@ -405,30 +337,36 @@ server <- function(input, output, session) {
     coords$wantedcrops <- input$Chosen_Crops
   }) 
   
+  # Call function OptimalStation and store it as a reactive value
+  myReactives <- reactiveValues()
+  observeEvent(input$execute, {
+    myReactives$data <-  OptimalStation(lat = coords$lat, long = coords$long,
+                                        Roof = coords$Roof,  roofeff = coords$roofeff,
+                                        veggies = coords$wantedcrops)
+  })
   
   # Render table of monthly precip and evapotranspiration data from optimal station
   output$table1 <- renderTable({
-    data1 <- OptimalData(lat = coords$lat, long = coords$long,  Roof = coords$Roof,  roofeff = coords$roofeff, vegis = coords$wantedcrops)
-  })
-  
-  
-  # Render map image showing user location relative to nearby weather stations
-  output$map2 <- renderImage({
-    data2 <- OptimalStation(lat = coords$lat, long = coords$long)
-    list(src = data2, contentType = 'image/png', width = 700, height = 700)
+    climate_data <- myReactives$data[[1]]
   })
   
   #Plotting outputs  
-  output$Plot1 <- renderPlot({
-    data1 <- OptimalData(lat = coords$lat, long = coords$long,  Roof = coords$Roof,  roofeff = coords$roofeff, vegis = coords$wantedcrops)
-    ggplot() +
-      geom_line(data=data1,aes(x=data1$month, y=data1$Cumulative_Rain_Vol(m3)),color='red')
-
-    
+  output$plot1 <- renderPlot({
+    climate_data <- myReactives$data[[1]]
+    ggplot(data = climate_data, aes(x = climate_data$index, y = climate_data$Cumulative_Rain_m3)) + geom_line(color='red') + xlab("Month") + ylab("Cumulative Rainfall (m3)")
   })
+  
+  # Render map image showing user location relative to nearby weather stations
+  output$map2 <- renderImage({
+    localMap <- myReactives$data[[2]]
+    list(src = localMap, contentType = 'image/jpg', width = 800, height = 700)
+  })
+  
+  ######Addition######Addition######Addition######Addition######Addition######Addition######
+  ######Addition######Addition######Addition######Addition######Addition######Addition######
+  ######Addition######Addition######Addition######Addition######Addition######Addition######
   
 }
 
 shinyApp(ui = ui, server = server)
-
 
