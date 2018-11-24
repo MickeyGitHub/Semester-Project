@@ -180,17 +180,17 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies){
     Stored_Water[i] <- (Collected_Precip[i] + Stored_Water[i-1])
   }
   
-  #dimensioning variables to match length of variable 'crops'
+  # determine mean crop coefficient based on user selection of crops
   crop <- as.character(crops$crop)
   coeff <- crops$coefficient
   crop_coeff <- rep(NA,length(veggies))
-  # select crop coefficients based on user input 'veggies'
   for (i in veggies){
     row_pos <- which(crop == i)
     crop_coeff[i] <- coeff[row_pos]
   }
   crop_coeff <- na.omit(crop_coeff)
   crop_coeff <- as.numeric(crop_coeff)
+  crop_coeff <- mean(crop_coeff)
   
   #Chosen_Crop_K <- rep(NA,length(crops))
   #Portion_Of_Crop <- rep(NA,length(crops))
@@ -353,7 +353,7 @@ server <- function(input, output, session) {
   #Plotting outputs  
   output$plot1 <- renderPlot({
     climate_data <- myReactives$data[[1]]
-    ggplot(data = climate_data, aes(x = climate_data$index, y = climate_data$Cumulative_Rain_m3)) + geom_line(color='red') + xlab("Month") + ylab("Cumulative Rainfall (m3)")
+    ggplot(data = climate_data, aes(x = climate_data$index, y = climate_data$Cumulative_Rain_m3)) + geom_line(color='red') + xlab("Month") + ylab("Cumulative Rainfall (m3)") + scale_x_continuous(breaks=c(1:12))
   })
   
   # Render map image showing user location relative to nearby weather stations
