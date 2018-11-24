@@ -35,7 +35,7 @@ OptimalStation <- function(lat, long){
   # Load in all station metadata from previously saved file
   options(noaakey = "YzLzNDLCXIzUwfAsWljYgxvxmZPMHtIj")
   library(rnoaa)
-  load("/Users/Zach/Documents/Hydroinformatics 7460/AguaLibre/utah_stations.Rdata") 
+  load("utah_stations.Rdata") 
   # Retrieve the closest weather station's metadata within a 10 km radius
   closest_stations <- meteo_nearby_stations(lat_lon_df = lat_lon_df,
                                             station_data = utah_stations,
@@ -99,17 +99,17 @@ OptimalStation <- function(lat, long){
   mapPoints
   localMap <- mapPoints
   ggsave("NearbyWeatherStations.png", width = 7, height = 5)
-  pathname <- '/Users/Zach/Documents/Hydroinformatics 7460/AguaLibre'
+  pathname <- '/Users/michaelnavidomskis/Desktop/AguaLibre'
   localMap <- paste0(pathname,'/NearbyWeatherStations.png')
   output_data <- localMap
   #End
   return(output_data)
 }
-# Function returns climate dataframe consistng of monthly precipitation (prcp) and evapotranspiration
+# Function returns climate dataframe consisting of monthly precipitation (prcp) and evapotranspiration
 # (evap) at the determined optimal weather station. First part of function retreives prcp data
 # using package 'rnoaa'. Second part of function retrieves evap data using the Utah State 
 # Climate Center's API online system.
-OptimalData <- function(lat, long){
+OptimalData <- function(lat, long, Roof, roofeff, vegis){
   # Start of 1st part
   start_date <- '2017-01-01'
   end_date <- '2018-01-01'
@@ -117,7 +117,7 @@ OptimalData <- function(lat, long){
   # Load in all station metadata from previously saved file
   options(noaakey = "YzLzNDLCXIzUwfAsWljYgxvxmZPMHtIj")
   library(rnoaa)
-  load("/Users/Zach/Documents/Hydroinformatics 7460/AguaLibre/utah_stations.Rdata") 
+  load("utah_stations.Rdata") 
   # Retrieve the closest weather station's metadata within a 10 km radius
   closest_stations <- meteo_nearby_stations(lat_lon_df = lat_lon_df,
                                             station_data = utah_stations,
@@ -207,11 +207,81 @@ OptimalData <- function(lat, long){
   evap <- as.numeric(evap_data[,1])
   mon <- as.numeric(evap_data[,2])
   std <- as.numeric(evap_data[,3])
+  
+  #dimension effective precipitation dataframe
+  precip_effective <- rep(NA,12)
+  
+  #for loop to calculate effective precipitation according to emperical FAO calculations
+  for (i in 1:nrow(monthly_prcp)) {
+    if (monthly_prcp[i] >= 2.95276){
+      precip_effective[i] <- ((monthly_prcp[i]*0.8)-0.984252)
+    }
+    else (precip_effective[i] <- ((monthly_prcp[i]*0.6)-0.393701))
+    
+  }
+  precip_effective[precip_effective<0] <- 0
+    
+  #Calculating the monthly collected rainfall in cubic meters
+  
+  #dimension effective precipitation dataframe
+  Collected_Precip <- rep(NA,12)
+  Stored_Water <- rep(NA,12)
+  
+  #acre-feet to cubic meters
+  conversion <- 1233.48
+  
+  for (i in 1:12) {
+    Collected_Precip[i] <- ((monthly_prcp[i]/12)*conversion*Roof*(roofeff/100))
+  }
+  
+
+  for (i in 1:12) {
+  Stored_Water[i] <- (Collected_Precip[i] + Stored_Water[i-1])
+  }
+  
+  #dimensioning variables to match length of variable 'crops'
+  Chosen_Crop_K <- rep(NA,length(crops))
+  Portion_Of_Crop <- rep(NA,length(crops))
+  Coeff_Factor <- rep(NA,length(crops))
+  
+
+
+  
+  newEvap <- rep(NA,length(evap))
+  newEvap[i] <- (evap[i]*2)
+  
+  
   # Combine monthly prcp and evap data together in dataframe
-  climate_data <- data.frame('month' = mon, 'prcp_in' = monthly_prcp, 'evap_sum_in' = evap, 'evap_std' = std)
+  climate_data <- data.frame('month' = mon,'Precipitation' = monthly_prcp,
+                             'Effective_Precip' = precip_effective,
+                             'Collected_Rain_Vol(m3)' = Collected_Precip, 
+                             'Cumulative_Rain_Vol(m3)' = Stored_Water, 
+                             'evap_sum_in' = evap, 
+                             'Adjusted_Evap' = newEvap, 
+                             'evap_std' = std)
   output_data <- climate_data
   return(output_data)
 }
+
+######################################################################################
+######################################################################################
+#       Don't mess up Zach's hard work       Don't mess up Zach's hard work
+######################################################################################
+######################################################################################
+#       Don't mess up Zach's hard work       Don't mess up Zach's hard work
+######################################################################################
+######################################################################################
+#       Don't mess up Zach's hard work       Don't mess up Zach's hard work
+######################################################################################
+######################################################################################
+#       Don't mess up Zach's hard work       Don't mess up Zach's hard work
+######################################################################################
+######################################################################################
+
+
+######################################################################################
+######################################################################################
+
 
 ##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal##ENDglobal
 
@@ -260,7 +330,9 @@ ui <- fluidPage(
     
     leafletOutput("map1"),
     tableOutput("table1"),
-    imageOutput("map2")
+    imageOutput("map2"),
+    plotOutput("Plot1")
+
     
     ),
   sidebarLayout(
@@ -269,7 +341,7 @@ ui <- fluidPage(
       #making a selection box widget
       selectInput("Chosen_Crops", label = h4("Choose Your Crops"), 
                   choices = unique(crops$crop), 
-                  selected = NULL,
+                  selected = "Carrots",
                   multiple = TRUE,
                   selectize = TRUE,
                   width = NULL,
@@ -321,10 +393,24 @@ server <- function(input, output, session) {
     coords$long <- input$Long
   }) 
   
+  observeEvent(input$execute, {
+    coords$Roof <- input$Roof_Area
+  }) 
+  
+  observeEvent(input$execute, {
+    coords$roofeff <- input$Roof_Eff
+  }) 
+  
+  observeEvent(input$execute, {
+    coords$wantedcrops <- input$Chosen_Crops
+  }) 
+  
+  
   # Render table of monthly precip and evapotranspiration data from optimal station
   output$table1 <- renderTable({
-    data1 <- OptimalData(lat = coords$lat, long = coords$long)
+    data1 <- OptimalData(lat = coords$lat, long = coords$long,  Roof = coords$Roof,  roofeff = coords$roofeff, vegis = coords$wantedcrops)
   })
+  
   
   # Render map image showing user location relative to nearby weather stations
   output$map2 <- renderImage({
@@ -332,7 +418,17 @@ server <- function(input, output, session) {
     list(src = data2, contentType = 'image/png', width = 700, height = 700)
   })
   
+  #Plotting outputs  
+  output$Plot1 <- renderPlot({
+    data1 <- OptimalData(lat = coords$lat, long = coords$long,  Roof = coords$Roof,  roofeff = coords$roofeff, vegis = coords$wantedcrops)
+    ggplot() +
+      geom_line(data=data1,aes(x=data1$month, y=data1$Cumulative_Rain_Vol(m3)),color='red')
+
+    
+  })
+  
 }
 
 shinyApp(ui = ui, server = server)
+
 
