@@ -25,14 +25,19 @@ library(dplyr)
 library(rjson)
 library(jsonlite)
 library(RCurl)
-library(scales)
 
 crops <- read.csv('data/crops.csv',header=TRUE)
 
-OptimalStation <- function(lat, long, Roof, roofeff, veggies){
-  start_date <- '2017-01-01'
-  end_date <- '2018-01-01'
-  # Start of 1st function
+OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
+  # Determine period of analysis from today's current date (end_date) to 10 years ago (start_date) 
+  end_date <- as.character(Sys.Date())
+  dates <- as.Date(end_date)
+  end_year <- as.numeric(format.Date(dates, "%y"))
+  end_month <- as.numeric(format.Date(dates, "%m"))
+  end_day <- as.numeric(format.Date(dates, "%d"))
+  start_year <- 2000 + end_year - 10
+  start_date <- paste(start_year,'-',end_month,'-',end_day, sep = '')
+  # Start of 1st part for prcp data retrieval
   lat_lon_df <- data.frame(id = "Station", latitude = lat, longitude = long)
   #Load in all station metadata from previously saved file
   options(noaakey = "YzLzNDLCXIzUwfAsWljYgxvxmZPMHtIj")
@@ -101,7 +106,8 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies){
       }
     }
     months[[i]] <- a
-    months[[i]] <- sum(months[[i]], na.rm = TRUE)
+    # Divide by 10 to get average monthly prcp for the last 10 year period of record
+    months[[i]] <- sum(months[[i]], na.rm = TRUE)/10
   }
   monthly_prcp <-  do.call(rbind, months)
   #Convert from tenths of mm to inches
@@ -122,8 +128,8 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies){
   ggsave("NearbyWeatherStations.jpg", width = 7, height = 5)
   pathname <- '/Users/Zach/Documents/Hydroinformatics 7460/AguaLibre'
   localMap <- paste0(pathname,'/NearbyWeatherStations.jpg')
-  # End of 1st function
-  # Start of 2nd function
+  # End of 1st part
+  # Start of 2nd part for evap data retreival 
   # Load new packages 
   library(rjson)
   library(jsonlite)
@@ -131,7 +137,6 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies){
   # Input
   lat <- station_metadata[3]
   long <- station_metadata[4]
-  start_date <- '2000-01-01'
   # Save base and full url as variables
   url_usu = "https://climate.usu.edu/API/api.php/v2/key=62PyzUjrCDYh0JB95faxrDcGB9tTss/evapotranspiration/average_monthly_sum"
   full_url = paste0(url_usu,'/state=UT/network=ghcn','/lat=',lat,'/long=',long,'/start_date=',start_date,'/end_date=',end_date,'/units=e/month=(1,2,3,4,5,6,7,8,9,10,11,12)/buffer=10')
@@ -144,10 +149,6 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies){
   mon <- c(1:12)
   mon_char <- c("Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec")
   std <- as.numeric(evap_data[,3])
-  
-  ######Addition######Addition######Addition######Addition######Addition######Addition######
-  ######Addition######Addition######Addition######Addition######Addition######Addition######
-  ######Addition######Addition######Addition######Addition######Addition######Addition######
   
   #dimension effective precipitation dataframe
   precip_effective <- rep(NA,12)
@@ -192,21 +193,15 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies){
   crop_coeff <- as.numeric(crop_coeff)
   crop_coeff <- mean(crop_coeff)
   
-  #Chosen_Crop_K <- rep(NA,length(crops))
-  #Portion_Of_Crop <- rep(NA,length(crops))
-  #Coeff_Factor <- rep(NA,length(crops))
+  # determine monthly demand of rainwater and balance between rain water supply
+  water_demand <- crop_coeff*Garden*(evap/12)*conversion
   
   # Combine monthly prcp and evap data together in dataframe
   climate_data <- data.frame('index' = mon, 'Month' = mon_char, 'Precipitation_in' = monthly_prcp,
                              'Effective_Precip' = precip_effective,
-                             'Collected_Rain_m3' = Collected_Precip, 
-                             'Cumulative_Rain_m3' = Stored_Water, 
-                             'evap_sum_in' = evap, 
-                             'evap_std' = std)
-  
-  ######Addition######Addition######Addition######Addition######Addition######Addition######
-  ######Addition######Addition######Addition######Addition######Addition######Addition######
-  ######Addition######Addition######Addition######Addition######Addition######Addition######
+                             'Collected_Rain_m3' = Collected_Precip,
+                             'Cumulative_Rain_m3' = Stored_Water,
+                             'Water_Demand_m3' = water_demand)
   
   output_data <- list(climate_data, localMap)
   return(output_data)
@@ -237,7 +232,7 @@ ui <- fluidPage(
   sidebarPanel(
     numericInput("Garden_Area",
                  "Input Garden Area in Acres:",
-                 value = 0.5, min = NA, max = NA, step = 0.001, width = NULL
+                 value = 0.2, min = NA, max = NA, step = 0.001, width = NULL
     )
   ),
   sidebarPanel(
@@ -258,7 +253,6 @@ ui <- fluidPage(
        Input into 'Roof Area' box."),
     
     leafletOutput("map1"),
-    tableOutput("table1"),
     plotOutput("plot1"),
     imageOutput("map2")
     
@@ -321,10 +315,6 @@ server <- function(input, output, session) {
     coords$long <- input$Long
   }) 
   
-  ######Addition######Addition######Addition######Addition######Addition######Addition######
-  ######Addition######Addition######Addition######Addition######Addition######Addition######
-  ######Addition######Addition######Addition######Addition######Addition######Addition######
-  
   observeEvent(input$execute, {
     coords$Roof <- input$Roof_Area
   }) 
@@ -337,34 +327,38 @@ server <- function(input, output, session) {
     coords$wantedcrops <- input$Chosen_Crops
   }) 
   
+  observeEvent(input$execute, {
+    coords$garden_area <- input$Garden_Area
+  }) 
+  
+  observeEvent(input$execute, {
+    coords$irrigation_eff <- input$Irrigation_Eff
+  }) 
+  
   # Call function OptimalStation and store it as a reactive value
   myReactives <- reactiveValues()
   observeEvent(input$execute, {
     myReactives$data <-  OptimalStation(lat = coords$lat, long = coords$long,
                                         Roof = coords$Roof,  roofeff = coords$roofeff,
-                                        veggies = coords$wantedcrops)
-  })
-  
-  # Render table of monthly precip and evapotranspiration data from optimal station
-  output$table1 <- renderTable({
-    climate_data <- myReactives$data[[1]]
+                                        veggies = coords$wantedcrops, Garden = coords$garden_area, 
+                                        irrigeff = coords$irrigation_eff)
   })
   
   #Plotting outputs  
   output$plot1 <- renderPlot({
     climate_data <- myReactives$data[[1]]
-    ggplot(data = climate_data, aes(x = climate_data$index, y = climate_data$Cumulative_Rain_m3)) + geom_line(color='red') + xlab("Month") + ylab("Cumulative Rainfall (m3)") + scale_x_continuous(breaks=c(1:12))
-  })
-  
+    ggplot() + geom_smooth(data = climate_data, aes(x = climate_data$index, y = climate_data$Collected_Rain_m3, color='red')) + 
+      geom_smooth(data = climate_data, aes(x = climate_data$index, y = climate_data$Water_Demand_m3), color = 'blue') + 
+      scale_x_continuous(breaks=c(1:12)) + 
+      labs(title = 'Rainwater Supply and Demand: 10 Year Historical Average', x = 'Month', y = 'Water Volume (m3)') + 
+      scale_color_manual(labels = c('Supply', 'Demand'), values = c("red", "blue"))
+    })
+
   # Render map image showing user location relative to nearby weather stations
   output$map2 <- renderImage({
     localMap <- myReactives$data[[2]]
     list(src = localMap, contentType = 'image/jpg', width = 800, height = 700)
   })
-  
-  ######Addition######Addition######Addition######Addition######Addition######Addition######
-  ######Addition######Addition######Addition######Addition######Addition######Addition######
-  ######Addition######Addition######Addition######Addition######Addition######Addition######
   
 }
 
