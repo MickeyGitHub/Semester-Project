@@ -126,8 +126,7 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
                                                       data = station_metadata)
   mapPoints
   ggsave("NearbyWeatherStations.jpg", width = 7, height = 5)
-  pathname <- '/Users/Zach/Documents/Hydroinformatics 7460/AguaLibre'
-  localMap <- paste0(pathname,'/NearbyWeatherStations.jpg')
+  localMap <- paste0('NearbyWeatherStations.jpg')
   # End of 1st part
   # Start of 2nd part for evap data retreival 
   # Load new packages 
@@ -316,7 +315,7 @@ server <- function(input, output, session) {
   
   # Action button linked to latitude and longitude user inputs that are linked to data
   # retrieval functions
-  coords <- reactiveValues(data = NULL)
+  coords <- reactiveValues()
   
   observeEvent(input$execute, {
     coords$lat <- input$Lat
@@ -347,28 +346,30 @@ server <- function(input, output, session) {
   }) 
   
   # Call function OptimalStation and store it's output as a reactive value
-  myReactives <- reactiveValues()
-  observeEvent(input$execute, {
-    myReactives$data <-  OptimalStation(lat = coords$lat, long = coords$long,
-                                        Roof = coords$Roof,  roofeff = coords$roofeff,
-                                        veggies = coords$wantedcrops, Garden = coords$garden_area, 
-                                        irrigeff = coords$irrigation_eff)
-  })
+  myReactives <- eventReactive(input$execute, {
+    OptimalStation(lat = coords$lat, long = coords$long,
+                   Roof = coords$Roof,  roofeff = coords$roofeff,
+                   veggies = coords$wantedcrops, Garden = coords$garden_area, 
+                   irrigeff = coords$irrigation_eff)
+  } ,ignoreNULL = FALSE, ignoreInit = FALSE)
   
   # Render table of water balance
   output$table1 <- renderTable({
-    climate_data <- myReactives$data[[1]]
+    data1 <- myReactives()
+    climate_data <- data1[[1]]
   })
   
   # Render text for required tank storage
   output$text1 <- renderText({
-    tank_storage <- myReactives$data[[3]]
+    data1 <- myReactives()
+    tank_storage <- data1[[3]]
     print(paste0('Required tank storage (m3): ', tank_storage))
   })
   
   # Plotting outputs  
   output$plot1 <- renderPlot({
-    climate_data <- myReactives$data[[1]]
+    data1 <- myReactives()
+    climate_data <- data1[[1]]
     ggplot() + geom_smooth(data = climate_data, aes(x = climate_data$index, y = climate_data$Collected_Rain_m3, color='red')) + 
       geom_smooth(data = climate_data, aes(x = climate_data$index, y = climate_data$Water_Demand_m3), color = 'blue') + 
       scale_x_continuous(breaks=c(1:12)) + 
@@ -378,7 +379,8 @@ server <- function(input, output, session) {
   
   # Render map image showing user location relative to nearby weather stations
   output$map2 <- renderImage({
-    localMap <- myReactives$data[[2]]
+    data1 <- myReactives()
+    localMap <- data1[[2]]
     list(src = localMap, contentType = 'image/jpg', width = 800, height = 700)
   })
   
