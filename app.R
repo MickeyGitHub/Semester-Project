@@ -201,7 +201,7 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
   # Required tank volume for storage
   tank_storage <- round(sum(Collected_Precip) - sum(water_demand), digits = 0)
   if (tank_storage < 0){
-    tank_storage <- 'annual demand is greater than annual supply'
+    tank_storage <- 'Annual demand is greater than annual supply. Try reducing the design garden area, increasing the irrigation efficiency or collection efficiency.'
   }
   
   # Combine monthly prcp and evap data together in dataframe
@@ -224,7 +224,7 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
 
 ui <- fluidPage(
   # Application title
-  titlePanel("AQUA LIBRE:
+  titlePanel("AGUA LIBRE:
              Rainwater Collection and Garden Irrigation Demand"),
   actionButton("execute", "Get Your Data: run time is less than 1 minute"),
   sidebarLayout(
@@ -264,7 +264,6 @@ ui <- fluidPage(
     leafletOutput("map1"),
     tableOutput("table1"),
     textOutput("text1"),
-    
     plotOutput("plot1"),
     imageOutput("map2")
     
@@ -376,7 +375,7 @@ server <- function(input, output, session) {
       labs(title = 'Rainwater Supply and Demand: 10 Year Historical Average', x = 'Month', y = 'Water Volume (m3)', color = "Legend Title\n") + 
       scale_color_manual(labels = c("Supply", "Demand"), values = c("red", "blue"))
     })
-
+  
   # Render map image showing user location relative to nearby weather stations
   output$map2 <- renderImage({
     localMap <- myReactives$data[[2]]
