@@ -167,18 +167,13 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
   
   #dimension effective precipitation dataframe
   Collected_Precip <- rep(NA,12)
-  Stored_Water <- rep(NA,12)
+  cum_balance <- rep(NA,12)
   
   #acre-feet to cubic meters
   conversion <- 1233.48
   
   for (i in 1:12) {
     Collected_Precip[i] <- ((monthly_prcp[i]/12)*conversion*Roof*(roofeff/100))
-  }
-  
-  Stored_Water[1] <- Collected_Precip[1]
-  for (i in 2:12) {
-    Stored_Water[i] <- (Collected_Precip[i] + Stored_Water[i-1])
   }
   
   # determine mean crop coefficient based on user selection of crops
@@ -195,15 +190,29 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
   
   # determine monthly demand of rainwater and balance between rain water supply
   water_demand <- crop_coeff*Garden*(evap/12)*conversion
+  balance <- Collected_Precip - water_demand
+  cum_balance[1] <- balance[1]
+  for (i in 2:12) {
+    cum_balance[i] <- (balance[i] + cum_balance[i-1])
+    if (cum_balance[i] < 0){
+      cum_balance[i] <- 0
+    }
+  }
+  # Required tank volume for storage
+  tank_storage <- round(sum(Collected_Precip) - sum(water_demand), digits = 0)
+  if (tank_storage < 0){
+    tank_storage <- 'annual demand is greater than annual supply'
+  }
   
   # Combine monthly prcp and evap data together in dataframe
-  climate_data <- data.frame('index' = mon, 'Month' = mon_char, 'Precipitation_in' = monthly_prcp,
-                             'Effective_Precip' = precip_effective,
+  climate_data <- data.frame('index' = mon, 'Month' = mon_char,
                              'Collected_Rain_m3' = Collected_Precip,
-                             'Cumulative_Rain_m3' = Stored_Water,
-                             'Water_Demand_m3' = water_demand)
+                             'Water_Demand_m3' = water_demand,
+                             'Balance' = balance,
+                             'Cumulative_Balance' = cum_balance)
   
-  output_data <- list(climate_data, localMap)
+  
+  output_data <- list(climate_data, localMap, tank_storage)
   return(output_data)
 }
 
@@ -253,6 +262,9 @@ ui <- fluidPage(
        Input into 'Roof Area' box."),
     
     leafletOutput("map1"),
+    tableOutput("table1"),
+    textOutput("text1"),
+    
     plotOutput("plot1"),
     imageOutput("map2")
     
@@ -335,7 +347,7 @@ server <- function(input, output, session) {
     coords$irrigation_eff <- input$Irrigation_Eff
   }) 
   
-  # Call function OptimalStation and store it as a reactive value
+  # Call function OptimalStation and store it's output as a reactive value
   myReactives <- reactiveValues()
   observeEvent(input$execute, {
     myReactives$data <-  OptimalStation(lat = coords$lat, long = coords$long,
@@ -344,14 +356,25 @@ server <- function(input, output, session) {
                                         irrigeff = coords$irrigation_eff)
   })
   
-  #Plotting outputs  
+  # Render table of water balance
+  output$table1 <- renderTable({
+    climate_data <- myReactives$data[[1]]
+  })
+  
+  # Render text for required tank storage
+  output$text1 <- renderText({
+    tank_storage <- myReactives$data[[3]]
+    print(paste0('Required tank storage (m3): ', tank_storage))
+  })
+  
+  # Plotting outputs  
   output$plot1 <- renderPlot({
     climate_data <- myReactives$data[[1]]
     ggplot() + geom_smooth(data = climate_data, aes(x = climate_data$index, y = climate_data$Collected_Rain_m3, color='red')) + 
       geom_smooth(data = climate_data, aes(x = climate_data$index, y = climate_data$Water_Demand_m3), color = 'blue') + 
       scale_x_continuous(breaks=c(1:12)) + 
-      labs(title = 'Rainwater Supply and Demand: 10 Year Historical Average', x = 'Month', y = 'Water Volume (m3)') + 
-      scale_color_manual(labels = c('Supply', 'Demand'), values = c("red", "blue"))
+      labs(title = 'Rainwater Supply and Demand: 10 Year Historical Average', x = 'Month', y = 'Water Volume (m3)', color = "Legend Title\n") + 
+      scale_color_manual(labels = c("Supply", "Demand"), values = c("red", "blue"))
     })
 
   # Render map image showing user location relative to nearby weather stations
