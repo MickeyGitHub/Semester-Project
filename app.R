@@ -188,7 +188,8 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
   crop_coeff <- mean(crop_coeff)
   
   # determine monthly demand of rainwater and balance between rain water supply
-  water_demand <- crop_coeff*Garden*(evap/12)*conversion
+  water_demand <- (crop_coeff*evap-precip_effective)/12
+  water_demand <- (water_demand*Garden*conversion)/(irrigeff/100)
   balance <- Collected_Precip - water_demand
   cum_balance[1] <- balance[1]
   for (i in 2:12) {
@@ -240,7 +241,7 @@ ui <- fluidPage(
   sidebarPanel(
     numericInput("Garden_Area",
                  "Input Garden Area in Acres:",
-                 value = 0.2, min = NA, max = NA, step = 0.001, width = NULL
+                 value = 0.18, min = NA, max = NA, step = 0.001, width = NULL
     )
   ),
   sidebarPanel(
@@ -351,7 +352,7 @@ server <- function(input, output, session) {
                    Roof = coords$Roof,  roofeff = coords$roofeff,
                    veggies = coords$wantedcrops, Garden = coords$garden_area, 
                    irrigeff = coords$irrigation_eff)
-  } ,ignoreNULL = FALSE, ignoreInit = FALSE)
+  })
   
   # Render table of water balance
   output$table1 <- renderTable({
