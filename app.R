@@ -25,6 +25,7 @@ library(dplyr)
 library(rjson)
 library(jsonlite)
 library(RCurl)
+library(reshape2)
 
 crops <- read.csv('data/crops.csv',header=TRUE)
 
@@ -42,7 +43,7 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
   #Load in all station metadata from previously saved file
   options(noaakey = "YzLzNDLCXIzUwfAsWljYgxvxmZPMHtIj")
   library(rnoaa)
-  load("utah_stations.Rdata") 
+  load("data/utah_stations.Rdata") 
   #Retrieve the closest weather station's metadata within a 10 km radius
   closest_stations <- meteo_nearby_stations(lat_lon_df = lat_lon_df,
                                             station_data = utah_stations,
@@ -125,8 +126,8 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
                                                       size = 3,
                                                       data = station_metadata)
   mapPoints
-  ggsave("NearbyWeatherStations.jpg", width = 7, height = 5)
-  localMap <- paste0('NearbyWeatherStations.jpg')
+  ggsave("data/NearbyWeatherStations.jpg", width = 7, height = 5)
+  localMap <- 'data/NearbyWeatherStations.jpg'
   # End of 1st part
   # Start of 2nd part for evap data retreival 
   # Load new packages 
@@ -149,10 +150,8 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
   mon_char <- c("Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec")
   std <- as.numeric(evap_data[,3])
   
-  #dimension effective precipitation dataframe
+  #Calculate effective precipitation according to emperical FAO calculations
   precip_effective <- rep(NA,12)
-  
-  #for loop to calculate effective precipitation according to emperical FAO calculations
   for (i in 1:nrow(monthly_prcp)) {
     if (monthly_prcp[i] >= 2.95276){
       precip_effective[i] <- ((monthly_prcp[i]*0.8)-0.984252)
@@ -163,14 +162,10 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
   precip_effective[precip_effective<0] <- 0
   
   #Calculating the monthly collected rainfall in cubic meters
-  
-  #dimension effective precipitation dataframe
   Collected_Precip <- rep(NA,12)
   cum_balance <- rep(NA,12)
-  
   #acre-feet to cubic meters
   conversion <- 1233.48
-  
   for (i in 1:12) {
     Collected_Precip[i] <- ((monthly_prcp[i]/12)*conversion*Roof*(roofeff/100))
   }
@@ -204,6 +199,14 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
     tank_storage <- 'Annual demand is greater than annual supply. Try reducing the design garden area, increasing the irrigation efficiency or collection efficiency.'
   }
   
+  # Create dataframe to reference for ggplot
+  climate_plot <- data.frame('Collected Rain' = Collected_Precip, 'Water Demand' = water_demand)
+  library(reshape2)
+  climate_plot <- melt(climate_plot)
+  mon2 <- rep(1:12,2)
+  climate_plot <- data.frame(mon2,climate_plot)
+  colnames(climate_plot) <-  c('Month', 'Variable', 'Value_m3')
+  
   # Combine monthly prcp and evap data together in dataframe
   climate_data <- data.frame('index' = mon, 'Month' = mon_char,
                              'Collected_Rain_m3' = Collected_Precip,
@@ -212,7 +215,7 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
                              'Cumulative_Balance' = cum_balance)
   
   
-  output_data <- list(climate_data, localMap, tank_storage)
+  output_data <- list(climate_data, localMap, tank_storage, climate_plot)
   return(output_data)
 }
 
@@ -370,12 +373,11 @@ server <- function(input, output, session) {
   # Plotting outputs  
   output$plot1 <- renderPlot({
     data1 <- myReactives()
-    climate_data <- data1[[1]]
-    ggplot() + geom_smooth(data = climate_data, aes(x = climate_data$index, y = climate_data$Collected_Rain_m3, color='red')) + 
-      geom_smooth(data = climate_data, aes(x = climate_data$index, y = climate_data$Water_Demand_m3), color = 'blue') + 
+    climate_plot <- data1[[4]]
+    ggplot() + geom_smooth(data = climate_plot, aes(x = climate_plot$Month, y = climate_plot$Value_m3, color = climate_plot$Variable)) + 
       scale_x_continuous(breaks=c(1:12)) + 
       labs(title = 'Rainwater Supply and Demand: 10 Year Historical Average', x = 'Month', y = 'Water Volume (m3)', color = "Legend Title\n") + 
-      scale_color_manual(labels = c("Supply", "Demand"), values = c("red", "blue"))
+      theme_set(theme_gray(base_size = 14))
     })
   
   # Render map image showing user location relative to nearby weather stations
