@@ -221,7 +221,7 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
 ui <- fluidPage(
   # Application title
   titlePanel("AGUA LIBRE:
-             Rainwater Collection and Garden Irrigation Demand"),
+             Roof-2-Food Calculator"),
   sidebarLayout(
     sidebarPanel(
       numericInput("Lat","Enter Latitude of Site",
