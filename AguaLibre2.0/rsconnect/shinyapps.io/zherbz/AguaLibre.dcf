@@ -1,0 +1,12 @@
+name: AguaLibre
+title: AguaLibre
+username:
+account: zherbz
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 588731
+bundleId: 1723570
+url: https://zherbz.shinyapps.io/AguaLibre/
+when: 1543333875.48073
+asMultiple: FALSE
+asStatic: FALSE
