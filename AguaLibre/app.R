@@ -7,11 +7,6 @@
 #    http://shiny.rstudio.com/
 #
 
-
-#EXAMPLE for calculating with user-input values
-#https://stackoverflow.com/questions/40997817/reactive-variables-in-shiny-for-later-calculations
-
-
 ######GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####
 ######GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####
 ######GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####GLOBAL####
@@ -117,7 +112,7 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
   library(ggmap)
   bbox <- make_bbox(long,lat,f=0.05)
   map <- get_map(bbox,maptype="toner-lite",source="stamen")
-  mapPoints <- ggmap(map) + ggtitle('Nearby Weather Stations within 10 km Radius. Optimal Weather Station:', station_metadata$Station.name) + 
+  mapPoints <- ggmap(map) + ggtitle('Nearby Weather Stations: 10 km Radius') + 
     geom_point(aes(x = Station.longitude, y = Station.latitude, color = AvailableData, size = Station.distance),
                data = closest_stations) + 
     scale_colour_gradient(low = "purple", high = "cyan", na.value = 'purple') +
@@ -138,8 +133,8 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
   lat <- station_metadata[3]
   long <- station_metadata[4]
   # Save base and full url as variables
-  url_usu = "https://climate.usu.edu/API/api.php/v2/key=62PyzUjrCDYh0JB95faxrDcGB9tTss/evapotranspiration/average_monthly_sum"
-  full_url = paste0(url_usu,'/state=UT/network=ghcn','/lat=',lat,'/long=',long,'/start_date=',start_date,'/end_date=',end_date,'/units=e/month=(1,2,3,4,5,6,7,8,9,10,11,12)/buffer=10')
+  url_usu <-  "https://climate.usu.edu/API/api.php/v2/key=62PyzUjrCDYh0JB95faxrDcGB9tTss/evapotranspiration/average_monthly_sum"
+  full_url <-  paste0(url_usu,'/state=UT/network=ghcn','/lat=',lat,'/long=',long,'/start_date=',start_date,'/end_date=',end_date,'/units=e/month=(1,2,3,4,5,6,7,8,9,10,11,12)/buffer=10')
   # Convert JSON to data frame
   evap_data <- fromJSON(getURL(full_url))
   # Break down list structure into numeric dataframe
@@ -164,6 +159,7 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
   #Calculating the monthly collected rainfall in cubic meters
   Collected_Precip <- rep(NA,12)
   cum_balance <- rep(NA,12)
+  cum_prcp <- rep(NA,12)
   #acre-feet to cubic meters
   conversion <- 1233.48
   for (i in 1:12) {
@@ -187,17 +183,16 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
   water_demand <- (water_demand*Garden*conversion)/(irrigeff/100)
   balance <- Collected_Precip - water_demand
   cum_balance[1] <- balance[1]
+  cum_prcp[1] <- Collected_Precip[1]
   for (i in 2:12) {
-    cum_balance[i] <- (balance[i] + cum_balance[i-1])
+    cum_balance[i] <- balance[i] + cum_balance[i-1]
+    cum_prcp[i] <- Collected_Precip[i] + cum_prcp[i-1]
     if (cum_balance[i] < 0){
       cum_balance[i] <- 0
     }
   }
   # Required tank volume for storage
-  tank_storage <- round(sum(Collected_Precip) - sum(water_demand), digits = 0)
-  if (tank_storage < 0){
-    tank_storage <- 'Annual demand is greater than annual supply. Try reducing the design garden area, increasing the irrigation efficiency or collection efficiency.'
-  }
+  storage_vol <- round(max(cum_balance), digits = 0)
   
   # Create dataframe to reference for ggplot
   climate_plot <- data.frame('Collected Rain' = Collected_Precip, 'Water Demand' = water_demand)
@@ -211,11 +206,9 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
   climate_data <- data.frame('index' = mon, 'Month' = mon_char,
                              'Collected_Rain_m3' = Collected_Precip,
                              'Water_Demand_m3' = water_demand,
-                             'Balance' = balance,
-                             'Cumulative_Balance' = cum_balance)
+                             'Tank_Storage_m3' = cum_balance)
   
-  
-  output_data <- list(climate_data, localMap, tank_storage, climate_plot)
+  output_data <- list(climate_data, localMap, storage_vol, climate_plot)
   return(output_data)
 }
 
@@ -229,7 +222,6 @@ ui <- fluidPage(
   # Application title
   titlePanel("AGUA LIBRE:
              Rainwater Collection and Garden Irrigation Demand"),
-  actionButton("execute", "Get Your Data: run time is less than 1 minute"),
   sidebarLayout(
     sidebarPanel(
       numericInput("Lat","Enter Latitude of Site",
@@ -244,13 +236,13 @@ ui <- fluidPage(
   sidebarPanel(
     numericInput("Garden_Area",
                  "Input Garden Area in Acres:",
-                 value = 0.18, min = NA, max = NA, step = 0.001, width = NULL
+                 value = 0.2, min = NA, max = NA, step = 0.001, width = NULL
     )
   ),
   sidebarPanel(
     numericInput ("Roof_Area",
                   "Input Roof Area in Acres:",
-                  value = 0.8, min = NA, max = NA, step = 0.001, width = NULL
+                  value = 0.4, min = NA, max = NA, step = 0.001, width = NULL
     )
   ),
   
@@ -264,10 +256,12 @@ ui <- fluidPage(
        Repeat the process for measuring the roof area used for rainwater collection.
        Input into 'Roof Area' box."),
     
+    
     leafletOutput("map1"),
     tableOutput("table1"),
     textOutput("text1"),
     plotOutput("plot1"),
+    plotOutput("plot2"),
     imageOutput("map2")
     
     ),
@@ -293,10 +287,14 @@ ui <- fluidPage(
       sliderInput("Roof_Eff", label = h4("Choose Your Rainwater Collection Efficiency"), min = 0, 
                   max = 100, value = 75),
       
-      h6("Common Efficiencies: 90% for most roofs. New metal roofs up to 95%.")
+      h6("Common Efficiencies: 90% for most roofs. New metal roofs up to 95%."),
       
+      actionButton("execute", "Get Your Data: takes less than 1 minute")
     ),
+    
+    
     mainPanel()
+    
   )
   )
 
@@ -366,8 +364,8 @@ server <- function(input, output, session) {
   # Render text for required tank storage
   output$text1 <- renderText({
     data1 <- myReactives()
-    tank_storage <- data1[[3]]
-    print(paste0('Required tank storage (m3): ', tank_storage))
+    storage_vol <- data1[[3]]
+    print(paste0('Required tank storage (m3): ', storage_vol))
   })
   
   # Plotting outputs  
@@ -380,11 +378,20 @@ server <- function(input, output, session) {
       theme_set(theme_gray(base_size = 14))
     })
   
+  output$plot2 <- renderPlot({
+    data1 <- myReactives()
+    climate_data <- data1[[1]]
+    ggplot() + geom_smooth(data = climate_data, aes(x = climate_data$index, y = climate_data$Tank_Storage_m3)) + 
+      scale_x_continuous(breaks=c(1:12)) + 
+      labs(title = ' Predicted Monthly Tank Storage', x = 'Month', y = 'Water Volume (m3)') + 
+      theme_set(theme_gray(base_size = 14))
+  })
+  
   # Render map image showing user location relative to nearby weather stations
   output$map2 <- renderImage({
     data1 <- myReactives()
     localMap <- data1[[2]]
-    list(src = localMap, contentType = 'image/jpg', width = 800, height = 700)
+    list(src = localMap, contentType = 'image/jpg', width = 900, height = 700)
   })
   
 }
