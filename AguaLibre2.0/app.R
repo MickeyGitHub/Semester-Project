@@ -24,7 +24,7 @@ library(reshape2)
 
 crops <- read.csv('data/crops.csv',header=TRUE)
 
-OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
+OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff, Season){
   # Determine period of analysis from today's current date (end_date) to 10 years ago (start_date) 
   end_date <- as.character(Sys.Date())
   dates <- as.Date(end_date)
@@ -181,7 +181,15 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
   # determine monthly demand of rainwater and balance between rain water supply
   water_demand <- (crop_coeff*evap-precip_effective)/12
   water_demand <- (water_demand*Garden*conversion)/(irrigeff/100)
-  balance <- Collected_Precip - water_demand
+  season_max <- max(Season)
+  season_min <- min(Season)
+  irrig_demand <- rep(0,12)
+  for (i in season_min:season_max){
+    irrig_demand[i] <- 1
+  }
+  irrig_demand <- water_demand*irrig_demand
+
+  balance <- Collected_Precip - irrig_demand
   cum_balance[1] <- balance[1]
   cum_prcp[1] <- Collected_Precip[1]
   for (i in 2:12) {
@@ -195,7 +203,7 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
   storage_vol <- round(max(cum_balance), digits = 0)
   
   # Create dataframe to reference for ggplot
-  climate_plot <- data.frame('Collected Rain' = Collected_Precip, 'Water Demand' = water_demand)
+  climate_plot <- data.frame('Collected Rain' = Collected_Precip, 'Irrigation Demand' = irrig_demand)
   library(reshape2)
   climate_plot <- melt(climate_plot)
   mon2 <- rep(1:12,2)
@@ -205,7 +213,7 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff){
   # Combine monthly prcp and evap data together in dataframe
   climate_data <- data.frame('index' = mon, 'Month' = mon_char,
                              'Collected_Rain_m3' = Collected_Precip,
-                             'Water_Demand_m3' = water_demand,
+                             'Irrigation_Demand_m3' = irrig_demand,
                              'Tank_Storage_m3' = cum_balance)
   
   output_data <- list(climate_data, localMap, storage_vol, climate_plot)
@@ -289,6 +297,12 @@ ui <- fluidPage(
       
       h6("Common Efficiencies: 90% for most roofs. New metal roofs up to 95%."),
       
+      # Making a irrigation season widget
+      sliderInput("season", label = h4("Choose Your Irrigation Season"), min = 1, 
+                  max = 12, value = c(4,10)),
+      
+      h6("Typical irrigation seasons begin in April (4) and end in October (10)."),
+      
       actionButton("execute", "Get Your Data: takes less than 1 minute")
     ),
     
@@ -347,12 +361,15 @@ server <- function(input, output, session) {
     coords$irrigation_eff <- input$Irrigation_Eff
   }) 
   
+  observeEvent(input$execute, {
+    coords$irrigation_seas <- input$season
+  }) 
   # Call function OptimalStation and store it's output as a reactive value
   myReactives <- eventReactive(input$execute, {
     OptimalStation(lat = coords$lat, long = coords$long,
                    Roof = coords$Roof,  roofeff = coords$roofeff,
                    veggies = coords$wantedcrops, Garden = coords$garden_area, 
-                   irrigeff = coords$irrigation_eff)
+                   irrigeff = coords$irrigation_eff, Season = coords$irrigation_seas)
   })
   
   # Render table of water balance
@@ -383,7 +400,7 @@ server <- function(input, output, session) {
     climate_data <- data1[[1]]
     ggplot() + geom_smooth(data = climate_data, aes(x = climate_data$index, y = climate_data$Tank_Storage_m3)) + 
       scale_x_continuous(breaks=c(1:12)) + 
-      labs(title = ' Predicted Monthly Tank Storage', x = 'Month', y = 'Water Volume (m3)') + 
+      labs(title = 'Predicted Monthly Tank Storage', x = 'Month', y = 'Water Volume (m3)') + 
       theme_set(theme_gray(base_size = 14))
   })
   
