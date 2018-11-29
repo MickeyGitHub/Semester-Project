@@ -25,7 +25,7 @@ library(plotly)
 
 crops <- read.csv('data/crops.csv',header=TRUE)
 
-OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff, Season){
+OptimalStation <- function(lat, long){
   # Determine period of analysis from today's current date (end_date) to 10 years ago (start_date) 
   end_date <- as.character(Sys.Date())
   dates <- as.Date(end_date)
@@ -141,89 +141,13 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff, 
   # Break down list structure into numeric dataframe
   evap_data <- do.call(rbind, evap_data[[2]])
   evap_data <- evap_data[c(2:13),]
-  evap <- as.numeric(evap_data[,1])
-  mon <- c(1:12)
-  mon_char <- c("Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec")
-  std <- as.numeric(evap_data[,3])
-  
-  #Calculate effective precipitation according to emperical FAO calculations
-  precip_effective <- rep(NA,12)
-  for (i in 1:nrow(monthly_prcp)) {
-    if (monthly_prcp[i] >= 2.95276){
-      precip_effective[i] <- ((monthly_prcp[i]*0.8)-0.984252)
-    }
-    else (precip_effective[i] <- ((monthly_prcp[i]*0.6)-0.393701))
-    
-  }
-  precip_effective[precip_effective<0] <- 0
-  
-  #Calculating the monthly collected rainfall in cubic meters
-  Collected_Precip <- rep(NA,12)
-  cum_balance <- rep(NA,12)
-  cum_prcp <- rep(NA,12)
-  #acre-feet to cubic meters
-  conversion <- 1233.48
-  for (i in 1:12) {
-    Collected_Precip[i] <- ((monthly_prcp[i]/12)*conversion*Roof*(roofeff/100))
-  }
-  
-  # determine mean crop coefficient based on user selection of crops
-  crop <- as.character(crops$crop)
-  coeff <- crops$coefficient
-  crop_coeff <- rep(NA,length(veggies))
-  for (i in veggies){
-    row_pos <- which(crop == i)
-    crop_coeff[i] <- coeff[row_pos]
-  }
-  crop_coeff <- na.omit(crop_coeff)
-  crop_coeff <- as.numeric(crop_coeff)
-  crop_coeff <- mean(crop_coeff)
-  
-  # determine monthly demand of rainwater and balance between rain water supply
-  water_demand <- (crop_coeff*evap-precip_effective)/12
-  water_demand <- (water_demand*Garden*conversion)/(irrigeff/100)
-  season_max <- max(Season)
-  season_min <- min(Season)
-  irrig_demand <- rep(0,12)
-  for (i in season_min:season_max){
-    irrig_demand[i] <- 1
-  }
-  irrig_demand <- water_demand*irrig_demand
-  
-  balance <- Collected_Precip - irrig_demand
-  cum_balance[1] <- balance[1]
-  required_input <- rep(0,12)
-  cum_prcp[1] <- Collected_Precip[1]
-  for (i in 2:12) {
-    cum_balance[i] <- balance[i] + cum_balance[i-1]
-    cum_prcp[i] <- Collected_Precip[i] + cum_prcp[i-1]
-    if (cum_balance[i] < 0){
-      required_input[i] <- cum_balance[i]*(-1)
-      cum_balance[i] <- 0
-    }
-  }
-  # Required tank volume, cumulative required input and annual savings of water
-  storage_vol <- round(max(cum_balance), digits = 0)
-  cum_input <- round(sum(required_input), digits = 0)
-  tot_demand <- round(sum(irrig_demand))
-  savings <- round(sum(irrig_demand)-cum_input, digits = 0)
-  
-  # Create dataframe to reference for ggplot
-  climate_plot <- data.frame('Collected Rain' = Collected_Precip, 'Irrigation Demand' = irrig_demand)
-  library(reshape2)
-  climate_plot <- melt(climate_plot)
-  mon2 <- rep(1:12,2)
-  climate_plot <- data.frame(mon2,climate_plot)
-  colnames(climate_plot) <-  c('Month', 'Variable', 'Value_m3')
+  monthly_evap <- as.numeric(evap_data[,1])
   
   # Combine monthly prcp and evap data together in dataframe
-  climate_data <- data.frame('index' = mon, 'Month' = mon_char,
-                             'Collected_Rain_m3' = Collected_Precip,
-                             'Irrigation_Demand_m3' = irrig_demand,
-                             'Tank_Storage_m3' = cum_balance,
-                             'Required_Input_m3' = required_input)
+  climate_data <- data.frame('Evap_in' = monthly_evap,
+                             'Prcp_in' = monthly_prcp)
   
-  output_data <- list(climate_data, localMap, storage_vol, climate_plot, cum_input, savings, tot_demand)
+  output_data <- list(climate_data, localMap)
   return(output_data)
 }
 
@@ -242,10 +166,10 @@ ui <- fluidPage(
   h5("Welcome to Agua Libre. This app allows you to select a potential garden 
      site and estimate its irrigation demand. The app also estimates rainwater collection
      potential for nearby roofs that can be used to irrigate your garden."),
-     
+  
   h5("Step 1: Enter the Latitude and Longitude for your site."),
   h5("Step 2: Enter values for area in acres for garden use and rainwater collection. Use the 
-      measure tool on the map to measure areas if needed."),
+     measure tool on the map to measure areas if needed."),
   h5("Step 3: Customize your garden and collection system using the widgets on the side panel."),
   h5("Step 4: Once all parameters are set to your liking, click the 'Get Your Data' button.
      Processing may take up to 1 minute."),
@@ -286,8 +210,8 @@ ui <- fluidPage(
     
     
     leafletOutput("map1")
-  ),
-
+    ),
+  
   sidebarLayout(
     sidebarPanel(
       
@@ -322,18 +246,18 @@ ui <- fluidPage(
     ),
     mainPanel()
   ),
-    mainPanel(
-      tabsetPanel(
-        tabPanel("Output Data Table",tableOutput("table1")),
-        tabPanel("Monthly Demand & Collection", plotOutput("plot1")),
-        tabPanel("Water in Tank",plotOutput("plot2"),textOutput("text1")),
-        tabPanel("Water Supplies",plotlyOutput("plot3")),
-        tabPanel("Data Access Map",imageOutput("map2")))
-      ),
+  mainPanel(
+    tabsetPanel(
+      tabPanel("Output Data Table",tableOutput("table1")),
+      tabPanel("Monthly Demand & Collection", plotOutput("plot1")),
+      tabPanel("Water in Tank",plotOutput("plot2"),textOutput("text1")),
+      tabPanel("Water Supplies",plotlyOutput("plot3")),
+      tabPanel("Data Access Map",imageOutput("map2")))
+  ),
   mainPanel()
-    
-  )
   
+  )
+
 
 ######ENDui######ENDui######ENDui######ENDui######ENDui######ENDui######ENDui######ENDui######ENDui######
 
@@ -363,48 +287,170 @@ server <- function(input, output, session) {
   observeEvent(input$execute, {
     coords$long <- input$Long
   }) 
-  
-  observeEvent(input$execute, {
-    coords$Roof <- input$Roof_Area
-  }) 
-  
-  observeEvent(input$execute, {
-    coords$roofeff <- input$Roof_Eff
-  }) 
-  
-  observeEvent(input$execute, {
-    coords$wantedcrops <- input$Chosen_Crops
-  }) 
-  
-  observeEvent(input$execute, {
-    coords$garden_area <- input$Garden_Area
-  }) 
-  
-  observeEvent(input$execute, {
-    coords$irrigation_eff <- input$Irrigation_Eff
-  }) 
-  
-  observeEvent(input$execute, {
-    coords$irrigation_seas <- input$season
-  }) 
+
   # Call function OptimalStation and store it's output as a reactive value
   myReactives <- eventReactive(input$execute, {
-    OptimalStation(lat = coords$lat, long = coords$long,
-                   Roof = coords$Roof,  roofeff = coords$roofeff,
-                   veggies = coords$wantedcrops, Garden = coords$garden_area, 
-                   irrigeff = coords$irrigation_eff, Season = coords$irrigation_seas)
+    OptimalStation(lat = coords$lat, long = coords$long)
   })
   
-  # Render table of water balance
+  
+  # Render table of water budget
   output$table1 <- renderTable({
     data1 <- myReactives()
     climate_data <- data1[[1]]
+    monthly_prcp <- climate_data$Prcp_in
+    monthly_evap <- climate_data$Evap_in
+    mon <- c(1:12)
+    mon_char <- c("Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec")
+
+    #Calculate effective precipitation according to emperical FAO calculations
+    precip_effective <- rep(NA,12)
+    for (i in 1:length(monthly_prcp)) {
+      if (monthly_prcp[i] >= 2.95276){
+        precip_effective[i] <- ((monthly_prcp[i]*0.8)-0.984252)
+      }
+      else (precip_effective[i] <- ((monthly_prcp[i]*0.6)-0.393701))
+      
+    }
+    precip_effective[precip_effective<0] <- 0
+    
+    #Calculating the monthly collected rainfall in cubic meters
+    Collected_Precip <- rep(NA,12)
+    cum_balance <- rep(NA,12)
+    cum_prcp <- rep(NA,12)
+    #acre-feet to cubic meters
+    conversion <- 1233.48
+    for (i in 1:12) {
+      Collected_Precip[i] <- ((monthly_prcp[i]/12)*conversion*input$Roof_Area*(input$Roof_Eff/100))
+    }
+    
+    # determine mean crop coefficient based on user selection of crops
+    crop <- as.character(crops$crop)
+    coeff <- crops$coefficient
+    crop_coeff <- rep(NA,length(input$Chosen_Crops))
+    for (i in input$Chosen_Crops){
+      row_pos <- which(crop == i)
+      crop_coeff[i] <- coeff[row_pos]
+    }
+    crop_coeff <- na.omit(crop_coeff)
+    crop_coeff <- as.numeric(crop_coeff)
+    crop_coeff <- mean(crop_coeff)
+    
+    # determine monthly demand of rainwater and balance between rain water supply
+    water_demand <- (crop_coeff*monthly_evap-precip_effective)/12
+    water_demand <- (water_demand*input$Garden_Area*conversion)/(input$Irrigation_Eff/100)
+    season_max <- max(input$season)
+    season_min <- min(input$season)
+    irrig_demand <- rep(0,12)
+    for (i in season_min:season_max){
+      irrig_demand[i] <- 1
+    }
+    irrig_demand <- water_demand*irrig_demand
+    
+    balance <- Collected_Precip - irrig_demand
+    cum_balance[1] <- balance[1]
+    required_input <- rep(0,12)
+    cum_prcp[1] <- Collected_Precip[1]
+    for (i in 2:12) {
+      cum_balance[i] <- balance[i] + cum_balance[i-1]
+      cum_prcp[i] <- Collected_Precip[i] + cum_prcp[i-1]
+      if (cum_balance[i] < 0){
+        required_input[i] <- cum_balance[i]*(-1)
+        cum_balance[i] <- 0
+      }
+    }
+    
+    # Combine monthly prcp and evap data together in dataframe
+    water_budget <- data.frame('index' = mon, 'Month' = mon_char,
+                               'Collected_Rain_m3' = Collected_Precip,
+                               'Irrigation_Demand_m3' = irrig_demand,
+                               'Tank_Storage_m3' = cum_balance,
+                               'Required_Input_m3' = required_input)
+    water_budget
   })
   
   # Plotting outputs  
   output$plot1 <- renderPlot({
     data1 <- myReactives()
-    climate_plot <- data1[[4]]
+    climate_data <- data1[[1]]
+    monthly_prcp <- climate_data$Prcp_in
+    monthly_evap <- climate_data$Evap_in
+    mon <- c(1:12)
+    mon_char <- c("Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec")
+    
+    #Calculate effective precipitation according to emperical FAO calculations
+    precip_effective <- rep(NA,12)
+    for (i in 1:length(monthly_prcp)) {
+      if (monthly_prcp[i] >= 2.95276){
+        precip_effective[i] <- ((monthly_prcp[i]*0.8)-0.984252)
+      }
+      else (precip_effective[i] <- ((monthly_prcp[i]*0.6)-0.393701))
+      
+    }
+    precip_effective[precip_effective<0] <- 0
+    
+    #Calculating the monthly collected rainfall in cubic meters
+    Collected_Precip <- rep(NA,12)
+    cum_balance <- rep(NA,12)
+    cum_prcp <- rep(NA,12)
+    #acre-feet to cubic meters
+    conversion <- 1233.48
+    for (i in 1:12) {
+      Collected_Precip[i] <- ((monthly_prcp[i]/12)*conversion*input$Roof_Area*(input$Roof_Eff/100))
+    }
+    
+    # determine mean crop coefficient based on user selection of crops
+    crop <- as.character(crops$crop)
+    coeff <- crops$coefficient
+    crop_coeff <- rep(NA,length(input$Chosen_Crops))
+    for (i in input$Chosen_Crops){
+      row_pos <- which(crop == i)
+      crop_coeff[i] <- coeff[row_pos]
+    }
+    crop_coeff <- na.omit(crop_coeff)
+    crop_coeff <- as.numeric(crop_coeff)
+    crop_coeff <- mean(crop_coeff)
+    
+    # determine monthly demand of rainwater and balance between rain water supply
+    water_demand <- (crop_coeff*monthly_evap-precip_effective)/12
+    water_demand <- (water_demand*input$Garden_Area*conversion)/(input$Irrigation_Eff/100)
+    season_max <- max(input$season)
+    season_min <- min(input$season)
+    irrig_demand <- rep(0,12)
+    for (i in season_min:season_max){
+      irrig_demand[i] <- 1
+    }
+    irrig_demand <- water_demand*irrig_demand
+    
+    balance <- Collected_Precip - irrig_demand
+    cum_balance[1] <- balance[1]
+    required_input <- rep(0,12)
+    cum_prcp[1] <- Collected_Precip[1]
+    for (i in 2:12) {
+      cum_balance[i] <- balance[i] + cum_balance[i-1]
+      cum_prcp[i] <- Collected_Precip[i] + cum_prcp[i-1]
+      if (cum_balance[i] < 0){
+        required_input[i] <- cum_balance[i]*(-1)
+        cum_balance[i] <- 0
+      }
+    }
+    
+    # Combine monthly prcp and evap data together in dataframe
+    water_budget <- data.frame('index' = mon, 'Month' = mon_char,
+                               'Collected_Rain_m3' = Collected_Precip,
+                               'Irrigation_Demand_m3' = irrig_demand,
+                               'Tank_Storage_m3' = cum_balance,
+                               'Required_Input_m3' = required_input)
+    
+    # Create dataframe to reference for ggplot
+    climate_plot <- data.frame('Collected Rain' = Collected_Precip, 'Irrigation Demand' = irrig_demand)
+    library(reshape2)
+    climate_plot <- melt(climate_plot)
+    mon2 <- rep(1:12,2)
+    climate_plot <- data.frame(mon2,climate_plot)
+    colnames(climate_plot) <-  c('Month', 'Variable', 'Value_m3')
+
+    #create ggplot smooth line graph
     ggplot() + geom_smooth(data = climate_plot, aes(x = climate_plot$Month, y = climate_plot$Value_m3, color = climate_plot$Variable)) + 
       scale_x_continuous(breaks=c(1:12)) + 
       labs(title = 'Rainwater Supply and Demand: 10 Year Historical Average', x = 'Month', y = 'Water Volume (m3)', color = "Legend Title\n") + 
@@ -414,8 +460,79 @@ server <- function(input, output, session) {
   output$plot2 <- renderPlot({
     data1 <- myReactives()
     climate_data <- data1[[1]]
-    storage_vol <- data1[[3]]
-    ggplot() + geom_col(data = climate_data, aes(climate_data$index, climate_data$Tank_Storage_m3)) + 
+    monthly_prcp <- climate_data$Prcp_in
+    monthly_evap <- climate_data$Evap_in
+    mon <- c(1:12)
+    mon_char <- c("Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec")
+    
+    #Calculate effective precipitation according to emperical FAO calculations
+    precip_effective <- rep(NA,12)
+    for (i in 1:length(monthly_prcp)) {
+      if (monthly_prcp[i] >= 2.95276){
+        precip_effective[i] <- ((monthly_prcp[i]*0.8)-0.984252)
+      }
+      else (precip_effective[i] <- ((monthly_prcp[i]*0.6)-0.393701))
+      
+    }
+    precip_effective[precip_effective<0] <- 0
+    
+    #Calculating the monthly collected rainfall in cubic meters
+    Collected_Precip <- rep(NA,12)
+    cum_balance <- rep(NA,12)
+    cum_prcp <- rep(NA,12)
+    #acre-feet to cubic meters
+    conversion <- 1233.48
+    for (i in 1:12) {
+      Collected_Precip[i] <- ((monthly_prcp[i]/12)*conversion*input$Roof_Area*(input$Roof_Eff/100))
+    }
+    
+    # determine mean crop coefficient based on user selection of crops
+    crop <- as.character(crops$crop)
+    coeff <- crops$coefficient
+    crop_coeff <- rep(NA,length(input$Chosen_Crops))
+    for (i in input$Chosen_Crops){
+      row_pos <- which(crop == i)
+      crop_coeff[i] <- coeff[row_pos]
+    }
+    crop_coeff <- na.omit(crop_coeff)
+    crop_coeff <- as.numeric(crop_coeff)
+    crop_coeff <- mean(crop_coeff)
+    
+    # determine monthly demand of rainwater and balance between rain water supply
+    water_demand <- (crop_coeff*monthly_evap-precip_effective)/12
+    water_demand <- (water_demand*input$Garden_Area*conversion)/(input$Irrigation_Eff/100)
+    season_max <- max(input$season)
+    season_min <- min(input$season)
+    irrig_demand <- rep(0,12)
+    for (i in season_min:season_max){
+      irrig_demand[i] <- 1
+    }
+    irrig_demand <- water_demand*irrig_demand
+    
+    balance <- Collected_Precip - irrig_demand
+    cum_balance[1] <- balance[1]
+    required_input <- rep(0,12)
+    cum_prcp[1] <- Collected_Precip[1]
+    for (i in 2:12) {
+      cum_balance[i] <- balance[i] + cum_balance[i-1]
+      cum_prcp[i] <- Collected_Precip[i] + cum_prcp[i-1]
+      if (cum_balance[i] < 0){
+        required_input[i] <- cum_balance[i]*(-1)
+        cum_balance[i] <- 0
+      }
+    }
+    
+    # Combine monthly prcp and evap data together in dataframe
+    water_budget <- data.frame('index' = mon, 'Month' = mon_char,
+                               'Collected_Rain_m3' = Collected_Precip,
+                               'Irrigation_Demand_m3' = irrig_demand,
+                               'Tank_Storage_m3' = cum_balance,
+                               'Required_Input_m3' = required_input)
+    
+    # Required tank design volume
+    storage_vol <- round(max(cum_balance), digits = 0)
+
+    ggplot() + geom_col(data = water_budget, aes(water_budget$index, water_budget$Tank_Storage_m3)) + 
       scale_x_continuous(breaks=c(1:12)) + 
       labs(title = paste('End of the Month Tank Storage.                     Required Tank Size (m3)', storage_vol), x = 'Month', y = 'Water Volume (m3)') + 
       theme_set(theme_gray(base_size = 14))
@@ -423,10 +540,83 @@ server <- function(input, output, session) {
   
   output$plot3 <- renderPlotly({
     data1 <- myReactives()
-    tot_demand <- as.numeric(data1[7])
-    savings <- as.numeric(data1[6])
-    required_input <- as.numeric(data1[5])
-    dat <- c(round((required_input/tot_demand)*100, digit = 0), round((savings/tot_demand)*100, digit = 0))
+    climate_data <- data1[[1]]
+    monthly_prcp <- climate_data$Prcp_in
+    monthly_evap <- climate_data$Evap_in
+    mon <- c(1:12)
+    mon_char <- c("Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec")
+    
+    #Calculate effective precipitation according to emperical FAO calculations
+    precip_effective <- rep(NA,12)
+    for (i in 1:length(monthly_prcp)) {
+      if (monthly_prcp[i] >= 2.95276){
+        precip_effective[i] <- ((monthly_prcp[i]*0.8)-0.984252)
+      }
+      else (precip_effective[i] <- ((monthly_prcp[i]*0.6)-0.393701))
+      
+    }
+    precip_effective[precip_effective<0] <- 0
+    
+    #Calculating the monthly collected rainfall in cubic meters
+    Collected_Precip <- rep(NA,12)
+    cum_balance <- rep(NA,12)
+    cum_prcp <- rep(NA,12)
+    #acre-feet to cubic meters
+    conversion <- 1233.48
+    for (i in 1:12) {
+      Collected_Precip[i] <- ((monthly_prcp[i]/12)*conversion*input$Roof_Area*(input$Roof_Eff/100))
+    }
+    
+    # determine mean crop coefficient based on user selection of crops
+    crop <- as.character(crops$crop)
+    coeff <- crops$coefficient
+    crop_coeff <- rep(NA,length(input$Chosen_Crops))
+    for (i in input$Chosen_Crops){
+      row_pos <- which(crop == i)
+      crop_coeff[i] <- coeff[row_pos]
+    }
+    crop_coeff <- na.omit(crop_coeff)
+    crop_coeff <- as.numeric(crop_coeff)
+    crop_coeff <- mean(crop_coeff)
+    
+    # determine monthly demand of rainwater and balance between rain water supply
+    water_demand <- (crop_coeff*monthly_evap-precip_effective)/12
+    water_demand <- (water_demand*input$Garden_Area*conversion)/(input$Irrigation_Eff/100)
+    season_max <- max(input$season)
+    season_min <- min(input$season)
+    irrig_demand <- rep(0,12)
+    for (i in season_min:season_max){
+      irrig_demand[i] <- 1
+    }
+    irrig_demand <- water_demand*irrig_demand
+    
+    balance <- Collected_Precip - irrig_demand
+    cum_balance[1] <- balance[1]
+    required_input <- rep(0,12)
+    cum_prcp[1] <- Collected_Precip[1]
+    for (i in 2:12) {
+      cum_balance[i] <- balance[i] + cum_balance[i-1]
+      cum_prcp[i] <- Collected_Precip[i] + cum_prcp[i-1]
+      if (cum_balance[i] < 0){
+        required_input[i] <- cum_balance[i]*(-1)
+        cum_balance[i] <- 0
+      }
+    }
+    
+    # Combine monthly prcp and evap data together in dataframe
+    water_budget <- data.frame('index' = mon, 'Month' = mon_char,
+                               'Collected_Rain_m3' = Collected_Precip,
+                               'Irrigation_Demand_m3' = irrig_demand,
+                               'Tank_Storage_m3' = cum_balance,
+                               'Required_Input_m3' = required_input)
+    
+    # Required tank design volume
+    storage_vol <- round(max(cum_balance), digits = 0)
+    cum_input <- round(sum(required_input), digits = 0)
+    tot_demand <- round(sum(irrig_demand))
+    savings <- round(sum(irrig_demand)-cum_input, digits = 0)
+    
+    dat <- c(cum_input, savings)
     lbls <- c('Required Input', 'Savings')
     df <- data.frame(dat, lbls)
     plot_ly(df, labels = ~lbls, values = ~dat, type = 'pie',textposition = 'outside',textinfo = 'label+percent') %>%
@@ -441,8 +631,6 @@ server <- function(input, output, session) {
     localMap <- data1[[2]]
     list(src = localMap, contentType = 'image/jpg', width = 900, height = 700)
   })
-  
-  
   
 }
 
