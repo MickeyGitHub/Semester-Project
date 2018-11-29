@@ -209,7 +209,14 @@ ui <- fluidPage(
        Input into 'Roof Area' box."),
     
     
-    leafletOutput("map1")
+    leafletOutput("map1"),
+    
+    tabsetPanel(
+      tabPanel("Output Data Table",tableOutput("table1")),
+      tabPanel("Monthly Demand & Collection", plotOutput("plot1")),
+      tabPanel("Water in Tank",plotOutput("plot2"),textOutput("text1")),
+      tabPanel("Water Supplies",plotlyOutput("plot3")),
+      tabPanel("Data Access Map",imageOutput("map2")))
     ),
   
   sidebarLayout(
@@ -246,14 +253,8 @@ ui <- fluidPage(
     ),
     mainPanel()
   ),
-  mainPanel(
-    tabsetPanel(
-      tabPanel("Output Data Table",tableOutput("table1")),
-      tabPanel("Monthly Demand & Collection", plotOutput("plot1")),
-      tabPanel("Water in Tank",plotOutput("plot2"),textOutput("text1")),
-      tabPanel("Water Supplies",plotlyOutput("plot3")),
-      tabPanel("Data Access Map",imageOutput("map2")))
-  ),
+
+
   mainPanel()
   
   )
@@ -287,7 +288,7 @@ server <- function(input, output, session) {
   observeEvent(input$execute, {
     coords$long <- input$Long
   }) 
-
+  
   # Call function OptimalStation and store it's output as a reactive value
   myReactives <- eventReactive(input$execute, {
     OptimalStation(lat = coords$lat, long = coords$long)
@@ -302,7 +303,7 @@ server <- function(input, output, session) {
     monthly_evap <- climate_data$Evap_in
     mon <- c(1:12)
     mon_char <- c("Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec")
-
+    
     #Calculate effective precipitation according to emperical FAO calculations
     precip_effective <- rep(NA,12)
     for (i in 1:length(monthly_prcp)) {
@@ -449,7 +450,7 @@ server <- function(input, output, session) {
     mon2 <- rep(1:12,2)
     climate_plot <- data.frame(mon2,climate_plot)
     colnames(climate_plot) <-  c('Month', 'Variable', 'Value_m3')
-
+    
     #create ggplot smooth line graph
     ggplot() + geom_smooth(data = climate_plot, aes(x = climate_plot$Month, y = climate_plot$Value_m3, color = climate_plot$Variable)) + 
       scale_x_continuous(breaks=c(1:12)) + 
@@ -531,7 +532,7 @@ server <- function(input, output, session) {
     
     # Required tank design volume
     storage_vol <- round(max(cum_balance), digits = 0)
-
+    
     ggplot() + geom_col(data = water_budget, aes(water_budget$index, water_budget$Tank_Storage_m3)) + 
       scale_x_continuous(breaks=c(1:12)) + 
       labs(title = paste('End of the Month Tank Storage.                     Required Tank Size (m3)', storage_vol), x = 'Month', y = 'Water Volume (m3)') + 
@@ -635,4 +636,3 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui = ui, server = server)
-
