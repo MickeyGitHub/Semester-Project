@@ -21,6 +21,7 @@ library(rjson)
 library(jsonlite)
 library(RCurl)
 library(reshape2)
+library(plotly)
 
 crops <- read.csv('data/crops.csv',header=TRUE)
 
@@ -191,16 +192,21 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff, 
 
   balance <- Collected_Precip - irrig_demand
   cum_balance[1] <- balance[1]
+  required_input <- rep(0,12)
   cum_prcp[1] <- Collected_Precip[1]
   for (i in 2:12) {
     cum_balance[i] <- balance[i] + cum_balance[i-1]
     cum_prcp[i] <- Collected_Precip[i] + cum_prcp[i-1]
     if (cum_balance[i] < 0){
+      required_input[i] <- cum_balance[i]*(-1)
       cum_balance[i] <- 0
     }
   }
-  # Required tank volume for storage
+  # Required tank volume, cumulative required input and annual savings of water
   storage_vol <- round(max(cum_balance), digits = 0)
+  cum_input <- round(sum(required_input), digits = 0)
+  tot_demand <- round(sum(irrig_demand))
+  savings <- round(sum(irrig_demand)-cum_input, digits = 0)
   
   # Create dataframe to reference for ggplot
   climate_plot <- data.frame('Collected Rain' = Collected_Precip, 'Irrigation Demand' = irrig_demand)
@@ -214,9 +220,10 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff, 
   climate_data <- data.frame('index' = mon, 'Month' = mon_char,
                              'Collected_Rain_m3' = Collected_Precip,
                              'Irrigation_Demand_m3' = irrig_demand,
-                             'Tank_Storage_m3' = cum_balance)
+                             'Tank_Storage_m3' = cum_balance,
+                             'Required_Input_m3' = required_input)
   
-  output_data <- list(climate_data, localMap, storage_vol, climate_plot)
+  output_data <- list(climate_data, localMap, storage_vol, climate_plot, cum_input, savings, tot_demand)
   return(output_data)
 }
 
@@ -267,11 +274,12 @@ ui <- fluidPage(
     
     leafletOutput("map1"),
     tableOutput("table1"),
-    textOutput("text1"),
     plotOutput("plot1"),
     plotOutput("plot2"),
+    textOutput("text1"),
+    plotlyOutput("plot3"),
     imageOutput("map2")
-    
+
     ),
   sidebarLayout(
     sidebarPanel(
@@ -298,10 +306,10 @@ ui <- fluidPage(
       h6("Common Efficiencies: 90% for most roofs. New metal roofs up to 95%."),
       
       # Making a irrigation season widget
-      sliderInput("season", label = h4("Choose Your Irrigation Season"), min = 1, 
+      sliderInput("season", label = h4("Choose Your Growing Season"), min = 1, 
                   max = 12, value = c(4,10)),
       
-      h6("Typical irrigation seasons begin in April (4) and end in October (10)."),
+      h6("Typical growing seasons begin in April (4) and end in October (10)."),
       
       actionButton("execute", "Get Your Data: takes less than 1 minute")
     ),
@@ -378,13 +386,6 @@ server <- function(input, output, session) {
     climate_data <- data1[[1]]
   })
   
-  # Render text for required tank storage
-  output$text1 <- renderText({
-    data1 <- myReactives()
-    storage_vol <- data1[[3]]
-    print(paste0('Required tank storage (m3): ', storage_vol))
-  })
-  
   # Plotting outputs  
   output$plot1 <- renderPlot({
     data1 <- myReactives()
@@ -398,10 +399,25 @@ server <- function(input, output, session) {
   output$plot2 <- renderPlot({
     data1 <- myReactives()
     climate_data <- data1[[1]]
-    ggplot() + geom_smooth(data = climate_data, aes(x = climate_data$index, y = climate_data$Tank_Storage_m3)) + 
+    storage_vol <- data1[[3]]
+    ggplot() + geom_col(data = climate_data, aes(climate_data$index, climate_data$Tank_Storage_m3)) + 
       scale_x_continuous(breaks=c(1:12)) + 
-      labs(title = 'Predicted Monthly Tank Storage', x = 'Month', y = 'Water Volume (m3)') + 
+      labs(title = paste('End of the Month Tank Storage.                     Required Tank Size (m3)', storage_vol), x = 'Month', y = 'Water Volume (m3)') + 
       theme_set(theme_gray(base_size = 14))
+  })
+  
+  output$plot3 <- renderPlotly({
+    data1 <- myReactives()
+    tot_demand <- as.numeric(data1[7])
+    savings <- as.numeric(data1[6])
+    required_input <- as.numeric(data1[5])
+    dat <- c(round((required_input/tot_demand)*100, digit = 0), round((savings/tot_demand)*100, digit = 0))
+    lbls <- c('Required Input', 'Savings')
+    df <- data.frame(dat, lbls)
+    plot_ly(df, labels = ~lbls, values = ~dat, type = 'pie',textposition = 'outside',textinfo = 'label+percent') %>%
+      layout(title = 'Estimated Annual Water Budget',
+             xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+             yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
   })
   
   # Render map image showing user location relative to nearby weather stations
