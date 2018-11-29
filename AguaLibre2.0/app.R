@@ -285,15 +285,9 @@ ui <- fluidPage(
        Input into 'Roof Area' box."),
     
     
-    leafletOutput("map1"),
-    tableOutput("table1"),
-    plotOutput("plot1"),
-    plotOutput("plot2"),
-    textOutput("text1"),
-    plotlyOutput("plot3"),
-    imageOutput("map2")
-    
-    ),
+    leafletOutput("map1")
+  ),
+
   sidebarLayout(
     sidebarPanel(
       
@@ -326,12 +320,20 @@ ui <- fluidPage(
       
       actionButton("execute", "Get Your Data: takes less than 1 minute")
     ),
-    
-    
     mainPanel()
+  ),
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Output Data Table",tableOutput("table1")),
+        tabPanel("Monthly Demand & Collection", plotOutput("plot1")),
+        tabPanel("Water in Tank",plotOutput("plot2"),textOutput("text1")),
+        tabPanel("Water Supplies",plotlyOutput("plot3")),
+        tabPanel("Data Access Map",imageOutput("map2")))
+      ),
+  mainPanel()
     
   )
-  )
+  
 
 ######ENDui######ENDui######ENDui######ENDui######ENDui######ENDui######ENDui######ENDui######ENDui######
 
@@ -439,6 +441,8 @@ server <- function(input, output, session) {
     localMap <- data1[[2]]
     list(src = localMap, contentType = 'image/jpg', width = 900, height = 700)
   })
+  
+  
   
 }
 
