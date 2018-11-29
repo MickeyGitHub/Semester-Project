@@ -23,7 +23,8 @@ library(RCurl)
 library(reshape2)
 library(plotly)
 
-crops <- read.csv('data/crops.csv',header=TRUE)
+load("data/crops.Rdata") 
+load("data/utah_stations.Rdata")
 
 OptimalStation <- function(lat, long){
   # Determine period of analysis from today's current date (end_date) to 10 years ago (start_date) 
@@ -39,7 +40,6 @@ OptimalStation <- function(lat, long){
   #Load in all station metadata from previously saved file
   options(noaakey = "YzLzNDLCXIzUwfAsWljYgxvxmZPMHtIj")
   library(rnoaa)
-  load("data/utah_stations.Rdata") 
   #Retrieve the closest weather station's metadata within a 10 km radius
   closest_stations <- meteo_nearby_stations(lat_lon_df = lat_lon_df,
                                             station_data = utah_stations,
@@ -253,8 +253,8 @@ ui <- fluidPage(
     ),
     mainPanel()
   ),
-
-
+  
+  
   mainPanel()
   
   )
@@ -636,3 +636,4 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui = ui, server = server)
+
