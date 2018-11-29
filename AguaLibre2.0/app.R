@@ -189,7 +189,7 @@ OptimalStation <- function(lat, long, Roof, roofeff, veggies, Garden, irrigeff, 
     irrig_demand[i] <- 1
   }
   irrig_demand <- water_demand*irrig_demand
-
+  
   balance <- Collected_Precip - irrig_demand
   cum_balance[1] <- balance[1]
   required_input <- rep(0,12)
@@ -237,6 +237,19 @@ ui <- fluidPage(
   # Application title
   titlePanel("AGUA LIBRE:
              Roof-2-Food Calculator"),
+  
+  #Text explaining the app
+  h5("Welcome to Agua Libre. This app allows you to select a potential garden 
+     site and estimate its irrigation demand. The app also estimates rainwater collection
+     potential for nearby roofs that can be used to irrigate your garden."),
+     
+  h5("Step 1: Enter the Latitude and Longitude for your site."),
+  h5("Step 2: Enter values for area in acres for garden use and rainwater collection. Use the 
+      measure tool on the map to measure areas if needed."),
+  h5("Step 3: Customize your garden and collection system using the widgets on the side panel."),
+  h5("Step 4: Once all parameters are set to your liking, click the 'Get Your Data' button.
+     Processing may take up to 1 minute."),
+  
   sidebarLayout(
     sidebarPanel(
       numericInput("Lat","Enter Latitude of Site",
@@ -279,7 +292,7 @@ ui <- fluidPage(
     textOutput("text1"),
     plotlyOutput("plot3"),
     imageOutput("map2")
-
+    
     ),
   sidebarLayout(
     sidebarPanel(
@@ -394,7 +407,7 @@ server <- function(input, output, session) {
       scale_x_continuous(breaks=c(1:12)) + 
       labs(title = 'Rainwater Supply and Demand: 10 Year Historical Average', x = 'Month', y = 'Water Volume (m3)', color = "Legend Title\n") + 
       theme_set(theme_gray(base_size = 14))
-    })
+  })
   
   output$plot2 <- renderPlot({
     data1 <- myReactives()
