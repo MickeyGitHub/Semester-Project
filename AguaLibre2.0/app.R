@@ -618,7 +618,7 @@ server <- function(input, output, session) {
     savings <- round(sum(irrig_demand)-cum_input, digits = 0)
     
     dat <- c(cum_input, savings)
-    lbls <- c('Required Input', 'Savings')
+    lbls <- c('Remaining Irrigation Demand', 'Rainwater Collection')
     df <- data.frame(dat, lbls)
     plot_ly(df, labels = ~lbls, values = ~dat, type = 'pie',textposition = 'outside',textinfo = 'label+percent') %>%
       layout(title = 'Estimated Annual Water Budget',
