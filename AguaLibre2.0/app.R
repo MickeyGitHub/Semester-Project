@@ -24,9 +24,10 @@ library(reshape2)
 library(plotly)
 
 load("data/crops.Rdata") 
-load("data/utah_stations.Rdata")
+load('data/station_data.Rdata')
+load('data/states.Rdata')
 
-OptimalStation <- function(lat, long){
+OptimalStation <- function(lat, long, state){
   # Determine period of analysis from today's current date (end_date) to 10 years ago (start_date) 
   end_date <- as.character(Sys.Date())
   dates <- as.Date(end_date)
@@ -41,8 +42,9 @@ OptimalStation <- function(lat, long){
   options(noaakey = "YzLzNDLCXIzUwfAsWljYgxvxmZPMHtIj")
   library(rnoaa)
   #Retrieve the closest weather station's metadata within a 10 km radius
+  station_data <- station_data[station_data$state == state,]
   closest_stations <- meteo_nearby_stations(lat_lon_df = lat_lon_df,
-                                            station_data = utah_stations,
+                                            station_data = station_data,
                                             radius = 10)
   closest_stations <- as.data.frame(closest_stations)
   lat <- as.vector(closest_stations$Station.latitude)
@@ -135,7 +137,7 @@ OptimalStation <- function(lat, long){
   long <- station_metadata[4]
   # Save base and full url as variables
   url_usu <-  "https://climate.usu.edu/API/api.php/v2/key=62PyzUjrCDYh0JB95faxrDcGB9tTss/evapotranspiration/average_monthly_sum"
-  full_url <-  paste0(url_usu,'/state=UT/network=ghcn','/lat=',lat,'/long=',long,'/start_date=',start_date,'/end_date=',end_date,'/units=e/month=(1,2,3,4,5,6,7,8,9,10,11,12)/buffer=10')
+  full_url <-  paste0(url_usu,'/state=',state,'/network=ghcn','/lat=',lat,'/long=',long,'/start_date=',start_date,'/end_date=',end_date,'/units=e/month=(1,2,3,4,5,6,7,8,9,10,11,12)/buffer=10')
   # Convert JSON to data frame
   evap_data <- fromJSON(getURL(full_url))
   # Break down list structure into numeric dataframe
@@ -222,6 +224,15 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       
+      #making a selection box widget for states
+      selectInput("Chosen_State", label = h4("Choose Your State"), 
+                  choices = unique(states$Code), 
+                  selected = "UT",
+                  multiple = FALSE,
+                  selectize = TRUE,
+                  width = NULL,
+                  size = NULL),
+      
       #making a selection box widget for cops
       selectInput("Chosen_Crops", label = h4("Choose Your Crops"), 
                   choices = unique(crops$crop), 
@@ -272,7 +283,7 @@ server <- function(input, output, session) {
   output$map1 <-renderLeaflet({
     m<-leaflet() %>%
       addProviderTiles('Esri.WorldImagery') %>%
-      addMarkers(lng = input$Long, lat = input$Lat, popup="Your Site") %>%
+      addMarkers(lng = input$Long, lat = input$Lat, popup="Your Site", options = markerOptions((draggable = TRUE))) %>%
       setView(lng = input$Long, lat = input$Lat, zoom = 16 )  %>%
       addMeasure()
   })
@@ -289,9 +300,12 @@ server <- function(input, output, session) {
     coords$long <- input$Long
   }) 
   
+  observeEvent(input$execute, {
+    coords$state <- input$Chosen_State
+  }) 
   # Call function OptimalStation and store it's output as a reactive value
   myReactives <- eventReactive(input$execute, {
-    OptimalStation(lat = coords$lat, long = coords$long)
+    OptimalStation(lat = coords$lat, long = coords$long, state = coords$state)
   })
   
   
